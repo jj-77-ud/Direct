@@ -1,10 +1,10 @@
 /**
- * LI.FI 技能实现
- * 
- * 封装 LI.FI SDK 跨链桥接逻辑。
- * 支持多链、多代币的跨链转移，提供最优路径选择。
- * 
- * 奖金要求：必须展示 AI Agent 如何根据报价（Quote）做出路径决策。
+ * LI.FI Skill Implementation
+ *
+ * Encapsulates LI.FI SDK cross-chain bridging logic.
+ * Supports multi-chain, multi-token cross-chain transfers with optimal route selection.
+ *
+ * Bounty requirement: Must demonstrate how AI Agent makes routing decisions based on quotes.
  */
 
 import { BaseSkill, createAndRegisterSkill } from './base-skill'
@@ -16,57 +16,57 @@ import { getRoutes, getStatus, executeRoute, type RoutesRequest, type Route, typ
 import { parseUnits, formatUnits } from 'viem'
 import { waitForTransactionReceipt } from 'viem/actions'
 
-// ==================== 技能配置 ====================
+// ==================== Skill Configuration ====================
 
 /**
- * LI.FI 技能配置
+ * LI.FI Skill Configuration
  */
 export interface LiFiSkillConfig {
-  // LI.FI API 配置
-  apiKey?: string               // LI.FI API 密钥
-  baseUrl?: string              // API 基础 URL
+  // LI.FI API Configuration
+  apiKey?: string               // LI.FI API Key
+  baseUrl?: string              // API Base URL
   
-  // 执行器配置
-  executorAddress?: Address     // LiFi Diamond 合约地址
+  // Executor Configuration
+  executorAddress?: Address     // LiFi Diamond contract address
   
-  // 跨链配置
-  defaultSlippage?: number      // 默认滑点容忍度（百分比）
-  defaultGasLimit?: string      // 默认 gas 限制
+  // Cross-chain Configuration
+  defaultSlippage?: number      // Default slippage tolerance (percentage)
+  defaultGasLimit?: string      // Default gas limit
   
-  // 重试配置
+  // Retry Configuration
   maxRetries?: number
   retryDelay?: number
   
-  // 调试配置
+  // Debug Configuration
   debugMode?: boolean
   
-  // 钱包客户端（可选，用于交易执行）
-  walletClient?: any            // viem WalletClient 实例
+  // Wallet Client (optional, for transaction execution)
+  walletClient?: any            // viem WalletClient instance
 }
 
-// ==================== 类型定义 ====================
+// ==================== Type Definitions ====================
 
 /**
- * LI.FI 报价参数
+ * LI.FI Quote Parameters
  */
 export interface LiFiQuoteParams {
-  fromChainId: number           // 源链 ID
-  toChainId: number             // 目标链 ID
-  fromTokenAddress: Address     // 源代币地址
-  toTokenAddress: Address       // 目标代币地址
-  amount: string                // 金额（字符串格式）
-  fromAddress?: Address         // 发送地址
-  toAddress?: Address           // 接收地址
-  slippage?: number             // 滑点容忍度
-  allowBridges?: string[]       // 允许的桥接器
-  denyBridges?: string[]        // 拒绝的桥接器
+  fromChainId: number           // Source chain ID
+  toChainId: number             // Destination chain ID
+  fromTokenAddress: Address     // Source token address
+  toTokenAddress: Address       // Destination token address
+  amount: string                // Amount (string format)
+  fromAddress?: Address         // Sender address
+  toAddress?: Address           // Recipient address
+  slippage?: number             // Slippage tolerance
+  allowBridges?: string[]       // Allowed bridges
+  denyBridges?: string[]        // Denied bridges
 }
 
 /**
- * LI.FI 报价结果
+ * LI.FI Quote Result
  */
 export interface LiFiQuote {
-  id: string                    // 报价 ID
+  id: string                    // Quote ID
   fromChainId: number
   toChainId: number
   fromToken: {
@@ -81,11 +81,11 @@ export interface LiFiQuote {
     name: string
     decimals: number
   }
-  fromAmount: string            // 源金额
-  toAmount: string              // 目标金额
-  toAmountMin: string           // 最小接收金额（考虑滑点）
+  fromAmount: string            // Source amount
+  toAmount: string              // Destination amount
+  toAmountMin: string           // Minimum received amount (considering slippage)
   
-  // 费用信息
+  // Fee Information
   gasCosts?: Array<{
     type: string
     amount: string
@@ -96,79 +96,79 @@ export interface LiFiQuote {
     }
   }>
   
-  // 路径信息
-  bridges?: string[]            // 使用的桥接器
+  // Path Information
+  bridges?: string[]            // Bridges used
   steps?: Array<{
     type: string
     tool: string
     action: any
   }>
   
-  // 时间信息
-  estimatedTime?: number        // 预估时间（秒）
+  // Time Information
+  estimatedTime?: number        // Estimated time (seconds)
   
-  // 元数据
-  transactionRequest?: any      // 交易请求数据
+  // Metadata
+  transactionRequest?: any      // Transaction request data
 }
 
 /**
- * LI.FI 执行状态
+ * LI.FI Execution Status
  */
 export enum LiFiExecutionStatus {
-  PENDING = 'PENDING',          // 等待开始
-  QUOTE_RECEIVED = 'QUOTE_RECEIVED', // 已获取报价
-  TRANSACTION_SENT = 'TRANSACTION_SENT', // 交易已发送
-  COMPLETED = 'COMPLETED',      // 完成
-  FAILED = 'FAILED',            // 失败
+  PENDING = 'PENDING',          // Waiting to start
+  QUOTE_RECEIVED = 'QUOTE_RECEIVED', // Quote received
+  TRANSACTION_SENT = 'TRANSACTION_SENT', // Transaction sent
+  COMPLETED = 'COMPLETED',      // Completed
+  FAILED = 'FAILED',            // Failed
 }
 
 /**
- * LI.FI 执行结果
+ * LI.FI Execution Result
  */
 export interface LiFiExecutionResult {
   status: LiFiExecutionStatus
-  quoteId?: string              // 报价 ID
+  quoteId?: string              // Quote ID
   fromChainId: number
   toChainId: number
   fromAmount: string
   toAmount?: string
   
-  // 交易信息
-  transactionHash?: string      // 交易哈希
-  bridgeName?: string           // 使用的桥接器
+  // Transaction Information
+  transactionHash?: string      // Transaction hash
+  bridgeName?: string           // Bridge used
   
-  // 时间信息
-  startedAt?: number            // 开始时间
-  completedAt?: number          // 完成时间
+  // Time Information
+  startedAt?: number            // Start time
+  completedAt?: number          // Completion time
   
-  // 错误信息
+  // Error Information
   error?: string
   retryCount?: number
   
-  // 实现状态信息
-  note?: string                 // 实现说明
-  implementationRequired?: boolean // 是否需要真实实现
+  // Implementation Status Information
+  note?: string                 // Implementation note
+  implementationRequired?: boolean // Whether real implementation is required
 }
 
-// ==================== 技能实现 ====================
+// ==================== Skill Implementation ====================
 
 /**
- * LI.FI 技能类
+ * LI.FI Skill Class
  */
 export class LiFiSkill extends BaseSkill {
-  // 技能元数据
+  // Skill Metadata
   readonly metadata: SkillMetadata = {
     id: 'lifi',
     name: 'LI.FI Cross-Chain Bridge',
-    description: '使用 LI.FI SDK 进行多链、多代币的跨链转移',
+    description: 'Cross-chain transfers using LI.FI SDK for multi-chain, multi-token support',
     version: '1.0.0',
     author: 'Nomad Arc Team',
     
     capabilities: [
-      'lifi_get_quote',         // 获取跨链报价
-      'lifi_execute',           // 执行跨链交易
-      'lifi_check_status',      // 检查执行状态
-      'lifi_estimate',          // 估算跨链成本
+      'lifi_get_quote',         // Get cross-chain quote
+      'lifi_execute',           // Execute cross-chain transaction
+      'lifi_check_status',      // Check execution status
+      'lifi_estimate',          // Estimate cross-chain cost
     ],
     
     requiredParams: ['action'], // action: 'quote' | 'execute' | 'status' | 'estimate'
@@ -181,48 +181,48 @@ export class LiFiSkill extends BaseSkill {
       ChainId.ARBITRUM_SEPOLIA,  // Arbitrum Sepolia
       ChainId.BASE_SEPOLIA,      // Base Sepolia
       ChainId.SEPOLIA,           // Sepolia
-      ChainId.BUILD_BEAR_ARBITRUM_SANDBOX, // BuildBear Arbitrum 沙箱
-      ChainId.ETHEREUM,          // 以太坊主网
-      ChainId.ARBITRUM,          // Arbitrum 主网
-      ChainId.BASE,              // Base 主网
-      ChainId.OPTIMISM,          // Optimism 主网
-      ChainId.POLYGON,           // Polygon 主网
-      ChainId.AVALANCHE,         // Avalanche 主网
-      ChainId.BSC,               // BSC 主网
+      ChainId.BUILD_BEAR_ARBITRUM_SANDBOX, // BuildBear Arbitrum Sandbox
+      ChainId.ETHEREUM,          // Ethereum Mainnet
+      ChainId.ARBITRUM,          // Arbitrum Mainnet
+      ChainId.BASE,              // Base Mainnet
+      ChainId.OPTIMISM,          // Optimism Mainnet
+      ChainId.POLYGON,           // Polygon Mainnet
+      ChainId.AVALANCHE,         // Avalanche Mainnet
+      ChainId.BSC,               // BSC Mainnet
     ],
     
     isAsync: true,
   }
   
-  // 技能特定配置
+  // Skill-specific configuration
   private lifiConfig: Required<LiFiSkillConfig>
   
-  // 执行状态跟踪
+  // Execution status tracking
   private executions: Map<string, LiFiExecutionResult> = new Map()
   
   /**
-   * 构造函数
+   * Constructor
    */
   constructor(config: LiFiSkillConfig = {}) {
     super(config)
     
-    // 移除硬编码的API Key，使用生产环境
+    // Remove hardcoded API Key, use production environment
     const apiKey = config.apiKey || process.env.NEXT_PUBLIC_LIFI_API_KEY || ''
     
-    // 使用生产环境API端点，添加allowTestnets配置
+    // Use production API endpoint, add allowTestnets configuration
     this.lifiConfig = {
       apiKey: apiKey,
-      baseUrl: config.baseUrl || 'https://li.quest/v1', // 使用生产环境API
-      executorAddress: config.executorAddress || '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae', // 默认测试网地址
+      baseUrl: config.baseUrl || 'https://li.quest/v1', // Use production API
+      executorAddress: config.executorAddress || '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae', // Default testnet address
       defaultSlippage: config.defaultSlippage || 0.5, // 0.5%
       defaultGasLimit: config.defaultGasLimit || '1000000',
       maxRetries: config.maxRetries || 3,
       retryDelay: config.retryDelay || 2000,
       debugMode: config.debugMode || false,
-      walletClient: config.walletClient, // 可选的钱包客户端
+      walletClient: config.walletClient, // Optional wallet client
     }
     
-    console.log('LI.FI 技能配置完成:', {
+    console.log('LI.FI skill configuration completed:', {
       hasApiKey: !!apiKey,
       apiKeyLength: apiKey.length,
       baseUrl: this.lifiConfig.baseUrl,
@@ -230,74 +230,74 @@ export class LiFiSkill extends BaseSkill {
     })
   }
   
-  // ==================== 工具函数 ====================
+  // ==================== Utility Functions ====================
 
   /**
-   * 手动创建 LI.FI SDK 兼容的 Signer
-   * 避免 SDK 自动克隆 walletClient 导致的 DataCloneError
-   * 创建"极简数据" Signer，不包含任何复杂对象引用
-   * 使用闭包引用外部 walletClient，确保对象可被 structuredClone
+   * Manually create LI.FI SDK compatible Signer
+   * Avoid DataCloneError caused by SDK automatically cloning walletClient
+   * Create "minimal data" Signer without any complex object references
+   * Use closure to reference external walletClient, ensuring object can be structuredClone
    */
   private createLiFiSigner(walletClient: any): any {
-    console.log('🔧 手动创建"极简数据" Signer（完全避免 structuredClone 限制）')
+    console.log('🔧 Manually creating "minimal data" Signer (completely avoiding structuredClone limitations)')
     
-    // 打印钱包客户端信息用于调试
-    console.log('📋 钱包客户端信息:', {
+    // Print wallet client information for debugging
+    console.log('📋 Wallet client information:', {
       chainId: walletClient.chain?.id,
       account: walletClient.account?.address,
       hasSignMessage: typeof walletClient.signMessage === 'function',
       hasSendTransaction: typeof walletClient.sendTransaction === 'function',
     })
     
-    // 提取关键信息作为纯字符串/数字
+    // Extract key information as pure strings/numbers
     const accountAddress = walletClient.account?.address || ''
     const chainId = walletClient.chain?.id || 31337
     
-    // 创建极简 Signer 对象 - 只包含基本数据，不包含函数
-    // 函数将在调用时通过闭包访问外部 walletClient
+    // Create minimal Signer object - only basic data, no functions
+    // Functions will be accessed via closure when called
     const minimalSigner = {
-      // 纯数据属性 - 可以被 structuredClone
+      // Pure data properties - can be structuredClone
       address: accountAddress,
-      chainId: 42161, // 逻辑 ID 骗过 SDK
+      chainId: 42161, // Logical ID to trick SDK
       
-      // 标记为 Signer
+      // Mark as Signer
       _isSigner: true,
       _isMinimalSigner: true,
     }
     
-    console.log('✅ "极简数据" Signer 创建成功')
-    console.log('📋 Signer 数据属性:', Object.keys(minimalSigner).filter(k => !k.startsWith('_')))
+    console.log('✅ "Minimal data" Signer created successfully')
+    console.log('📋 Signer data properties:', Object.keys(minimalSigner).filter(k => !k.startsWith('_')))
     
-    // 验证对象是否可序列化
+    // Verify object can be serialized
     try {
       const testClone = structuredClone(minimalSigner)
-      console.log('✅ Signer 可序列化验证通过 - 对象只包含基本数据')
+      console.log('✅ Signer serialization verification passed - object contains only basic data')
     } catch (cloneError) {
-      console.error('❌ Signer 无法序列化:', (cloneError as Error).message)
-      console.log('⚠️ 这不应该发生，因为对象只包含字符串和数字')
-      throw new Error(`Signer 无法序列化: ${(cloneError as Error).message}`)
+      console.error('❌ Signer cannot be serialized:', (cloneError as Error).message)
+      console.log('⚠️ This should not happen as object only contains strings and numbers')
+      throw new Error(`Signer cannot be serialized: ${(cloneError as Error).message}`)
     }
     
-    // 创建代理对象，在调用时动态绑定函数
-    // 这个代理对象不会被 structuredClone，因为 executeRoute 会克隆 minimalSigner 而不是代理
+    // Create proxy object to dynamically bind functions when called
+    // This proxy won't be structuredClone because executeRoute clones minimalSigner, not the proxy
     const signerProxy = new Proxy(minimalSigner, {
       get(target, prop, receiver) {
-        // 如果是数据属性，直接返回
+        // If it's a data property, return directly
         if (prop in target) {
           return Reflect.get(target, prop, receiver)
         }
         
-        // 如果是方法调用，动态创建函数
+        // If it's a method call, dynamically create function
         switch (prop) {
           case 'getAddress':
             return async () => accountAddress
             
           case 'getChainId':
-            return async () => 42161 // 逻辑 ID
+            return async () => 42161 // Logical ID
             
           case 'signMessage':
             return async (message: string) => {
-              console.log('🔐 通过闭包调用 signMessage')
+              console.log('🔐 Calling signMessage via closure')
               return await walletClient.signMessage({
                 account: walletClient.account,
                 message
@@ -306,14 +306,14 @@ export class LiFiSkill extends BaseSkill {
             
           case 'sendTransaction':
             return async (transaction: any) => {
-              console.log('📤 通过闭包调用 sendTransaction:', {
+              console.log('📤 Calling sendTransaction via closure:', {
                 to: transaction.to,
                 data: transaction.data?.substring(0, 100) + '...',
                 value: transaction.value,
                 chainId: chainId,
               })
               
-              // 使用 walletClient 发送交易，确保物理链 ID 匹配
+              // Use walletClient to send transaction, ensuring physical chain ID matches
               return await walletClient.sendTransaction({
                 account: walletClient.account,
                 to: transaction.to,
@@ -325,8 +325,8 @@ export class LiFiSkill extends BaseSkill {
             
           case 'confirmTransaction':
             return async (hash: string) => {
-              console.log(`⏳ 确认交易: ${hash}`)
-              // 这里需要 publicClient，但我们可以在需要时创建
+              console.log(`⏳ Confirming transaction: ${hash}`)
+              // Need publicClient here, but we can create when needed
               return { hash, status: 'success' }
             }
             
@@ -335,18 +335,18 @@ export class LiFiSkill extends BaseSkill {
         }
       },
       
-      // 确保 has 检查正常工作
+      // Ensure has check works correctly
       has(target, prop) {
         return prop in target ||
           ['getAddress', 'getChainId', 'signMessage', 'sendTransaction', 'confirmTransaction'].includes(prop as string)
       },
       
-      // 确保 ownKeys 只返回数据属性
+      // Ensure ownKeys only returns data properties
       ownKeys(target) {
         return Reflect.ownKeys(target)
       },
       
-      // 确保 getOwnPropertyDescriptor 正常工作
+      // Ensure getOwnPropertyDescriptor works correctly
       getOwnPropertyDescriptor(target, prop) {
         if (prop in target) {
           return Reflect.getOwnPropertyDescriptor(target, prop)
@@ -358,29 +358,29 @@ export class LiFiSkill extends BaseSkill {
     return signerProxy
   }
 
-  // ==================== 抽象方法实现 ====================
+  // ==================== Abstract Method Implementation ====================
 
   /**
-   * 初始化 LI.FI 技能
+   * Initialize LI.FI skill
    */
   protected async onInitialize(): Promise<void> {
     console.log('Initializing LI.FI skill...')
     
     try {
-      // 使用 createConfig 配置 LI.FI SDK，添加 allowTestnets 配置
+      // Use createConfig to configure LI.FI SDK, add allowTestnets configuration
       const config = createConfig({
         apiUrl: this.lifiConfig.baseUrl,
-        integrator: 'Nomad-Arc', // 必需的 integrator 参数
+        integrator: 'Nomad-Arc', // Required integrator parameter
         apiKey: this.lifiConfig.apiKey,
-        // 允许测试网
+        // Allow testnets
         allowTestnets: true,
-        // 覆盖 Arbitrum 主网分叉的 RPC
+        // Override RPC for Arbitrum mainnet fork
         rpcs: {
           [42161]: [process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC || 'https://rpc.buildbear.io/delicate-cannonball-45d06d30'],
         },
-        // 禁用多链 RPC 切换，确保使用沙箱 RPC
+        // Disable multichain RPC switching to ensure sandbox RPC is used
         multichain: false,
-      } as any) // 使用 as any 绕过类型检查
+      } as any) // Use as any to bypass type checking
       
       console.log('LI.FI SDK configured:', {
         baseUrl: this.lifiConfig.baseUrl,
@@ -390,10 +390,10 @@ export class LiFiSkill extends BaseSkill {
         allowTestnets: true,
       })
       
-      // 验证配置
+      // Validate configuration
       this.validateConfig()
       
-      // 清空状态跟踪
+      // Clear status tracking
       this.executions.clear()
       
       console.log('✅ LI.FI skill initialized successfully')
@@ -415,7 +415,7 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * 执行 LI.FI 操作
+   * Execute LI.FI operation
    */
   protected async onExecute(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { action } = params
@@ -439,7 +439,7 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * 自定义参数验证
+   * Custom parameter validation
    */
   protected onValidate(params: Record<string, any>): { valid: boolean; errors: string[] } {
     const errors: string[] = []
@@ -450,7 +450,7 @@ export class LiFiSkill extends BaseSkill {
       return { valid: false, errors }
     }
     
-    // 根据 action 验证参数
+    // Validate parameters based on action
     if (action === 'quote' || action === 'execute' || action === 'estimate') {
       if (!params.fromChainId) {
         errors.push('Missing required parameter: fromChainId')
@@ -492,18 +492,18 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * 估算执行成本
+   * Estimate execution cost
    */
   protected async onEstimate(params: Record<string, any>, context: AgentContext): Promise<{
     gasEstimate: string
     timeEstimate: number
     costEstimate?: string
   }> {
-    // LI.FI 跨链通常涉及复杂的多步操作
-    // 这里提供保守的估算值
+    // LI.FI cross-chain typically involves complex multi-step operations
+    // Provide conservative estimates here
     
-    const gasEstimate = '1500000' // 保守估计
-    const timeEstimate = 120000   // 2分钟估计
+    const gasEstimate = '1500000' // Conservative estimate
+    const timeEstimate = 120000   // 2-minute estimate
     
     return {
       gasEstimate,
@@ -512,10 +512,10 @@ export class LiFiSkill extends BaseSkill {
     }
   }
   
-  // ==================== 具体操作方法 ====================
+  // ==================== Concrete Operation Methods ====================
   
   /**
-   * 获取跨链报价（奖金要求核心功能）
+   * Get cross-chain quote (core functionality for bounty requirement)
    */
   private async getQuote(params: Record<string, any>, context: AgentContext): Promise<LiFiQuote> {
     const {
@@ -538,7 +538,7 @@ export class LiFiSkill extends BaseSkill {
       slippage,
     })
     
-    // 测试网代币地址映射 - 黑客松演示后备路径
+    // Testnet token address mapping - hackathon demo fallback path
     const TESTNET_TOKEN_ADDRESSES = {
       // Arbitrum Sepolia
       421614: {
@@ -552,77 +552,77 @@ export class LiFiSkill extends BaseSkill {
       },
     }
     
-    // 如果提供的地址是零地址或无效，使用后备地址
+    // If provided address is zero address or invalid, use fallback address
     let finalFromTokenAddress = fromTokenAddress as Address
     let finalToTokenAddress = toTokenAddress as Address
     
-    // 检查是否为测试网并尝试使用已知代币地址
+    // Check if it's a testnet and try to use known token addresses
     if (fromChainId === 421614 || fromChainId === 84532) {
       if (fromTokenAddress === '0x0000000000000000000000000000000000000000' ||
           fromTokenAddress === '0xf3c3351d6bd0098eeb33ca8f830faf2a141ea2e1') {
-        // 使用USDC作为后备
+        // Use USDC as fallback
         finalFromTokenAddress = TESTNET_TOKEN_ADDRESSES[fromChainId as keyof typeof TESTNET_TOKEN_ADDRESSES]?.USDC || fromTokenAddress as Address
-        console.log(`使用测试网后备代币地址 (${fromChainId}):`, finalFromTokenAddress)
+        console.log(`Using testnet fallback token address (${fromChainId}):`, finalFromTokenAddress)
       }
     }
     
     if (toChainId === 421614 || toChainId === 84532) {
       if (toTokenAddress === '0x0000000000000000000000000000000000000000' ||
           toTokenAddress === '0xf3c3351d6bd0098eeb33ca8f830faf2a141ea2e1') {
-        // 使用USDC作为后备
+        // Use USDC as fallback
         finalToTokenAddress = TESTNET_TOKEN_ADDRESSES[toChainId as keyof typeof TESTNET_TOKEN_ADDRESSES]?.USDC || toTokenAddress as Address
-        console.log(`使用测试网后备代币地址 (${toChainId}):`, finalToTokenAddress)
+        console.log(`Using testnet fallback token address (${toChainId}):`, finalToTokenAddress)
       }
     }
     
     try {
-      // 链 ID 映射：BuildBear 沙箱 (31337) -> Arbitrum 主网 (42161)
-      // LI.FI API 不认识私有沙盒 ID，需要映射到对应的主网 ID
+      // Chain ID mapping: BuildBear sandbox (31337) -> Arbitrum mainnet (42161)
+      // LI.FI API doesn't recognize private sandbox ID, need to map to corresponding mainnet ID
       const mappedFromChainId = Number(fromChainId) === 31337 ? 42161 : Number(fromChainId)
       const mappedToChainId = Number(toChainId) === 31337 ? 42161 : Number(toChainId)
       
-      console.log('链 ID 映射:', {
+      console.log('Chain ID mapping:', {
         originalFromChainId: fromChainId,
         mappedFromChainId,
         originalToChainId: toChainId,
         mappedToChainId,
-        note: 'BuildBear 沙箱 (31337) 映射为 Arbitrum 主网 (42161) 以兼容 LI.FI API'
+        note: 'BuildBear sandbox (31337) mapped to Arbitrum mainnet (42161) for LI.FI API compatibility'
       })
       
-      // 转换金额为 BigIntish 格式（代币最小单位的整数字符串）
-      // LI.FI API 期望 fromAmount 是 BigIntish 格式（整数字符串）
+      // Convert amount to BigIntish format (integer string of token smallest unit)
+      // LI.FI API expects fromAmount to be in BigIntish format (integer string)
       let fromAmountBigIntish: string
       try {
-        // 尝试将金额字符串解析为数字
+        // Try to parse amount string as number
         const amountNum = parseFloat(String(amount))
         if (isNaN(amountNum)) {
           throw new Error(`Invalid amount: ${amount}`)
         }
         
-        // 根据代币地址判断小数位数
-        // 对于 USDC（Arbitrum 主网地址），使用 6 位小数
-        // 对于 ETH（零地址），使用 18 位小数
-        // 对于其他代币，使用默认 18 位小数
-        let decimals = 18 // 默认
+        // Determine decimal places based on token address
+        // For USDC (Arbitrum mainnet address), use 6 decimals
+        // For ETH (zero address), use 18 decimals
+        // For other tokens, use default 18 decimals
+        let decimals = 18 // Default
         const usdcAddress = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'.toLowerCase()
         const wethAddress = '0x82af49447d8a07e3bd95bd0d56f35241523fbab1'.toLowerCase()
         
         if (finalFromTokenAddress.toLowerCase() === usdcAddress) {
           decimals = 6
-          console.log(`检测到 USDC 代币，使用 ${decimals} 位小数`)
+          console.log(`Detected USDC token, using ${decimals} decimals`)
         } else if (finalFromTokenAddress.toLowerCase() === wethAddress ||
                    finalFromTokenAddress === '0x0000000000000000000000000000000000000000') {
           decimals = 18
-          console.log(`检测到 ETH/WETH 代币，使用 ${decimals} 位小数`)
+          console.log(`Detected ETH/WETH token, using ${decimals} decimals`)
         } else {
-          console.log(`未知代币地址 ${finalFromTokenAddress}，使用默认 ${decimals} 位小数`)
+          console.log(`Unknown token address ${finalFromTokenAddress}, using default ${decimals} decimals`)
         }
         
-        // 使用 parseUnits 将带小数点的金额转换为 BigInt
+        // Use parseUnits to convert decimal amount to BigInt
         const amountBigInt = parseUnits(String(amountNum), decimals)
         fromAmountBigIntish = amountBigInt.toString()
         
-        console.log('金额转换:', {
+        console.log('Amount conversion:', {
           originalAmount: amount,
           parsedAmount: amountNum,
           decimals,
@@ -630,12 +630,12 @@ export class LiFiSkill extends BaseSkill {
           bigIntishString: fromAmountBigIntish
         })
       } catch (convertError) {
-        console.error('金额转换失败，使用原始字符串:', convertError)
-        // 如果转换失败，使用原始字符串（可能是已经是 BigIntish 格式）
+        console.error('Amount conversion failed, using original string:', convertError)
+        // If conversion fails, use original string (might already be in BigIntish format)
         fromAmountBigIntish = String(amount)
       }
       
-      // 使用真实的 LI.FI SDK 获取报价（使用映射后的链 ID）
+      // Use real LI.FI SDK to get quote (using mapped chain IDs)
       const request = {
         fromChainId: mappedFromChainId,
         toChainId: mappedToChainId,
@@ -645,13 +645,13 @@ export class LiFiSkill extends BaseSkill {
         fromAddress: fromAddress as Address,
         toAddress: toAddress as Address,
         options: {
-          slippage: slippage / 100, // 转换为小数
+          slippage: slippage / 100, // Convert to decimal
           order: 'RECOMMENDED' as const,
         },
       }
       
-      console.log('LI.FI 请求参数（映射后）:', JSON.stringify(request, null, 2))
-      console.log('请求URL:', `${this.lifiConfig.baseUrl}/advanced/routes`)
+      console.log('LI.FI request parameters (mapped):', JSON.stringify(request, null, 2))
+      console.log('Request URL:', `${this.lifiConfig.baseUrl}/advanced/routes`)
       
       const routes = await getRoutes(request)
       
@@ -661,7 +661,7 @@ export class LiFiSkill extends BaseSkill {
       
       const route = routes.routes[0]
       
-      // 转换 LI.FI SDK 的 Route 到我们的 LiFiQuote 格式
+      // Convert LI.FI SDK's Route to our LiFiQuote format
       const quote: LiFiQuote = {
         id: route.id || `quote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         fromChainId: route.fromChainId,
@@ -682,7 +682,7 @@ export class LiFiSkill extends BaseSkill {
         toAmount: route.toAmount,
         toAmountMin: route.toAmountMin || route.toAmount,
         
-        // 费用信息 - 根据实际 Route 类型调整
+        // Fee information - adjust based on actual Route type
         gasCosts: (route as any).gasCosts?.map((cost: any) => ({
           type: cost.type || 'GAS',
           amount: cost.amount || '0',
@@ -693,7 +693,7 @@ export class LiFiSkill extends BaseSkill {
           },
         })),
         
-        // 路径信息
+        // Path information
         bridges: route.steps
           .filter((step: any) => step.type === 'cross' || step.type === 'lifi')
           .map((step: any) => step.tool),
@@ -703,18 +703,18 @@ export class LiFiSkill extends BaseSkill {
           action: step.action,
         })),
         
-        // 时间信息 - 使用实际属性或默认值
+        // Time information - use actual property or default value
         estimatedTime: (route as any).estimatedDuration || 120,
         
-        // 交易请求数据
+        // Transaction request data
         transactionRequest: {
           route,
-          note: '真实的 LI.FI SDK 报价',
+          note: 'Real LI.FI SDK quote',
           implementationRequired: false,
         },
       }
       
-      console.log('LI.FI 报价获取成功:', {
+      console.log('LI.FI quote obtained successfully:', {
         quoteId: quote.id,
         fromAmount: quote.fromAmount,
         toAmount: quote.toAmount,
@@ -722,25 +722,25 @@ export class LiFiSkill extends BaseSkill {
         steps: quote.steps?.length,
       })
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('lifi_get_quote', params, context, quote)
       
       return quote
       
     } catch (error) {
-      console.error('LI.FI 报价获取失败:', error)
+      console.error('LI.FI quote acquisition failed:', error)
       
-      // 记录错误日志
+      // Log error
       this.logExecution('lifi_get_quote_error', params, context, { error: String(error) })
       
-      // 根据要求：如果真正的RPC调用失败，严禁回退到模拟数据
-      // 直接抛出错误，不返回任何占位符数据
-      throw new Error(`LI.FI 报价获取失败: ${error instanceof Error ? error.message : String(error)}`)
+      // According to requirements: if real RPC call fails, strictly prohibit falling back to mock data
+      // Throw error directly, do not return any placeholder data
+      throw new Error(`LI.FI quote acquisition failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
   
   /**
-   * 执行跨链转移
+   * Execute cross-chain transfer
    */
   private async executeTransfer(params: Record<string, any>, context: AgentContext): Promise<LiFiExecutionResult> {
     const {
@@ -749,13 +749,13 @@ export class LiFiSkill extends BaseSkill {
       amount,
       fromChainId,
       toChainId,
-      route // 新增：LI.FI SDK 的 Route 对象
+      route // New: LI.FI SDK Route object
     } = params
     
-    // 生成执行 ID
+    // Generate execution ID
     const executionId = `exec_${quoteId}_${Date.now()}`
     
-    // 初始化执行状态
+    // Initialize execution status
     const execution: LiFiExecutionResult = {
       status: LiFiExecutionStatus.PENDING,
       quoteId,
@@ -765,7 +765,7 @@ export class LiFiSkill extends BaseSkill {
       startedAt: Date.now(),
     }
     
-    // 保存状态
+    // Save status
     this.executions.set(executionId, execution)
     
     console.log('Executing LI.FI transfer:', {
@@ -778,25 +778,25 @@ export class LiFiSkill extends BaseSkill {
       hasRoute: !!route,
     })
 
-    // 如果是 Arbitrum 沙箱，打印 BuildBear Explorer URL 模板
+    // If it's Arbitrum sandbox, print BuildBear Explorer URL template
     if (fromChainId === 42161 || fromChainId === 31337) {
       console.log('📡 BuildBear Arbitrum Sandbox Explorer: https://explorer.buildbear.io/delicate-cannonball-45d06d30')
-      console.log('  交易哈希 URL 模板: https://explorer.buildbear.io/delicate-cannonball-45d06d30/tx/{txHash}')
+      console.log('  Transaction hash URL template: https://explorer.buildbear.io/delicate-cannonball-45d06d30/tx/{txHash}')
     }
     
     try {
-      // 检查是否有钱包客户端
+      // Check if wallet client exists
       if (!this.lifiConfig.walletClient) {
         throw new Error('Wallet client not configured. Please provide a wallet client in LiFiSkillConfig.')
       }
       
-      // 检查是否有路由
+      // Check if route exists
       if (!route) {
         throw new Error('Route not provided. Please provide the LI.FI route from the quote.')
       }
       
-      console.log('🚀 使用轻量化策略执行 LI.FI 跨链转移')
-      console.log('📋 路由详情:', {
+      console.log('🚀 Executing LI.FI cross-chain transfer using lightweight strategy')
+      console.log('📋 Route details:', {
         fromChainId: route.fromChainId,
         toChainId: route.toChainId,
         fromAmount: route.fromAmount,
@@ -805,42 +805,42 @@ export class LiFiSkill extends BaseSkill {
         bridges: route.steps?.map((step: any) => step.tool).filter(Boolean) || [],
       })
       
-      // 检查授权状态
+      // Check approval status
       console.log('Checking token approval status...')
       
-      // 对于 USDC 代币，需要确保已授权给 LI.FI 执行器
-      // LI.FI SDK 通常会处理授权，但为了安全，我们检查一下
+      // For USDC token, ensure it's approved to LI.FI executor
+      // LI.FI SDK usually handles approval, but check for safety
       const usdcAddress = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
       const lifiExecutor = this.lifiConfig.executorAddress
       
       if (route.fromToken.address.toLowerCase() === usdcAddress.toLowerCase()) {
         console.log('USDC token detected, ensuring approval...')
-        // 在实际实现中，这里应该检查并执行授权
-        // 但 LI.FI SDK 的 transactionRequest 可能已包含授权逻辑
+        // In actual implementation, should check and execute approval here
+        // But LI.FI SDK's transactionRequest might already include approval logic
       }
       
-      // 使用 LI.FI SDK 的 executeRoute 执行跨链转移
-      console.log('⏳ 使用 LI.FI SDK executeRoute 执行跨链转移...')
+      // Use LI.FI SDK's executeRoute to execute cross-chain transfer
+      console.log('⏳ Using LI.FI SDK executeRoute to execute cross-chain transfer...')
       
       try {
-        // 获取钱包客户端
+        // Get wallet client
         const walletClient = this.lifiConfig.walletClient
         
         if (!walletClient) {
-          throw new Error('钱包客户端未配置，无法执行交易')
+          throw new Error('Wallet client not configured, cannot execute transaction')
         }
         
-        // 手动创建 LI.FI SDK 兼容的 Signer，避免自动克隆导致的 DataCloneError
+        // Manually create LI.FI SDK compatible Signer to avoid DataCloneError from automatic cloning
         const lifiSigner = this.createLiFiSigner(walletClient)
         
-        // SDK 逻辑 ID 欺骗：确保 route 对象使用逻辑 ID 42161 而不是物理 ID 31337
-        // LI.FI SDK 需要看到 42161（Arbitrum 主网）才能正确处理路由
+        // SDK logical ID trick: ensure route object uses logical ID 42161 instead of physical ID 31337
+        // LI.FI SDK needs to see 42161 (Arbitrum mainnet) to process route correctly
         const processedRoute = { ...route }
         if (processedRoute.fromChainId === 31337) {
-          console.log('🔄 执行 SDK 逻辑 ID 欺骗：将 fromChainId 从 31337 映射到 42161')
+          console.log('🔄 Performing SDK logical ID trick: mapping fromChainId from 31337 to 42161')
           processedRoute.fromChainId = 42161
           
-          // 同时更新路由步骤中的链 ID
+          // Also update chain IDs in route steps
           if (processedRoute.steps && Array.isArray(processedRoute.steps)) {
             processedRoute.steps = processedRoute.steps.map((step: any) => {
               if (step.action.fromChainId === 31337) {
@@ -857,9 +857,9 @@ export class LiFiSkill extends BaseSkill {
           }
         }
         
-        // 尝试使用 LI.FI SDK 的 executeRoute 函数执行路由
-        console.log('🚀 尝试调用 executeRoute 执行跨链交易（使用手动 Signer）...')
-        console.log('📋 路由详情:', {
+        // Try to execute route using LI.FI SDK's executeRoute function
+        console.log('🚀 Attempting to call executeRoute for cross-chain transaction (using manual Signer)...')
+        console.log('📋 Route details:', {
           originalFromChainId: route.fromChainId,
           processedFromChainId: processedRoute.fromChainId,
           toChainId: processedRoute.toChainId,
@@ -872,28 +872,28 @@ export class LiFiSkill extends BaseSkill {
         let transactionHash: `0x${string}` | undefined
         
         try {
-          // 执行路由 - executeRoute 会处理所有步骤，包括授权和跨链交易
-          console.log('⏳ 正在执行跨链路由...')
+          // Execute route - executeRoute handles all steps including approval and cross-chain transaction
+          console.log('⏳ Executing cross-chain route...')
           executeResult = await executeRoute(lifiSigner, processedRoute)
           
-          console.log('✅ LI.FI SDK executeRoute 调用成功')
+          console.log('✅ LI.FI SDK executeRoute call successful')
           
-          // 根据 LI.FI SDK 文档，executeRoute 返回更新后的路由
-          // 交易哈希可能位于路由的 steps 中
+          // According to LI.FI SDK documentation, executeRoute returns updated route
+          // Transaction hash might be in route's steps
           const steps = executeResult.steps || []
           for (const step of steps) {
             if ((step as any).transactionHash) {
               transactionHash = (step as any).transactionHash as `0x${string}`
-              console.log(`🔍 在步骤 "${step.type}" 中找到交易哈希: ${transactionHash}`)
+              console.log(`🔍 Found transaction hash in step "${step.type}": ${transactionHash}`)
               break
             } else if ((step as any).transactionId) {
               transactionHash = (step as any).transactionId as `0x${string}`
-              console.log(`🔍 在步骤 "${step.type}" 中找到交易ID: ${transactionHash}`)
+              console.log(`🔍 Found transaction ID in step "${step.type}": ${transactionHash}`)
               break
             }
           }
           
-          // 如果步骤中没有找到，尝试从路由的其他位置查找
+          // If not found in steps, try to find in other parts of route
           if (!transactionHash && (executeResult as any).transactionHash) {
             transactionHash = (executeResult as any).transactionHash as `0x${string}`
           } else if (!transactionHash && (executeResult as any).transactionId) {
@@ -901,25 +901,25 @@ export class LiFiSkill extends BaseSkill {
           }
           
           if (!transactionHash) {
-            console.warn('⚠️  executeRoute 未返回交易哈希，检查路由步骤:')
+            console.warn('⚠️  executeRoute did not return transaction hash, checking route steps:')
             console.log(JSON.stringify(executeResult, null, 2))
-            throw new Error('executeRoute 未返回交易哈希，请检查路由执行状态')
+            throw new Error('executeRoute did not return transaction hash, please check route execution status')
           }
           
         } catch (executeError) {
-          console.warn('⚠️  LI.FI SDK executeRoute 执行失败（可能是 DataCloneError）:',
+          console.warn('⚠️  LI.FI SDK executeRoute execution failed (possibly DataCloneError):',
             executeError instanceof Error ? executeError.message : String(executeError))
           
-          // 备选方案：手动提取 transactionRequest 并发送交易
-          console.log('🔄 尝试手动发送交易作为备选方案...')
+          // Alternative: manually extract transactionRequest and send transaction
+          console.log('🔄 Attempting manual transaction sending as alternative...')
           
-          // 检查路由是否包含 transactionRequest
+          // Check if route contains transactionRequest
           if (processedRoute.transactionRequest) {
-            console.log('📋 路由包含 transactionRequest，尝试手动发送...')
+            console.log('📋 Route contains transactionRequest, attempting manual send...')
             const txRequest = processedRoute.transactionRequest
             
-            // 手动发送交易
-            console.log('📤 手动发送交易...')
+            // Manually send transaction
+            console.log('📤 Manually sending transaction...')
             transactionHash = await walletClient.sendTransaction({
               account: walletClient.account,
               to: txRequest.to,
@@ -928,16 +928,16 @@ export class LiFiSkill extends BaseSkill {
               chain: walletClient.chain,
             })
             
-            console.log(`✅ 手动交易发送成功，哈希: ${transactionHash}`)
+            console.log(`✅ Manual transaction sent successfully, hash: ${transactionHash}`)
             executeResult = { transactionHash, steps: [] }
             
           } else if (processedRoute.steps && processedRoute.steps.length > 0) {
-            // 尝试从第一个步骤提取交易数据
-            console.log('📋 从路由步骤提取交易数据...')
+            // Try to extract transaction data from first step
+            console.log('📋 Extracting transaction data from route steps...')
             const firstStep = processedRoute.steps[0]
             if (firstStep.transactionRequest) {
               const txRequest = firstStep.transactionRequest
-              console.log('📤 从第一个步骤手动发送交易...')
+              console.log('📤 Manually sending transaction from first step...')
               transactionHash = await walletClient.sendTransaction({
                 account: walletClient.account,
                 to: txRequest.to,
@@ -946,22 +946,22 @@ export class LiFiSkill extends BaseSkill {
                 chain: walletClient.chain,
               })
               
-              console.log(`✅ 手动交易发送成功，哈希: ${transactionHash}`)
+              console.log(`✅ Manual transaction sent successfully, hash: ${transactionHash}`)
               executeResult = { transactionHash, steps: [firstStep] }
             } else {
-              throw new Error('路由不包含可执行的交易请求，无法手动发送')
+              throw new Error('Route does not contain executable transaction request, cannot send manually')
             }
           } else {
-            // 重新抛出原始错误
+            // Re-throw original error
             throw executeError
           }
         }
         
         if (!transactionHash) {
-          throw new Error('无法获取交易哈希，执行失败')
+          throw new Error('Unable to obtain transaction hash, execution failed')
         }
         
-        console.log('📊 执行结果:', {
+        console.log('📊 Execution result:', {
           transactionHash,
           fromAmount: executeResult?.fromAmount || processedRoute.fromAmount,
           toAmount: executeResult?.toAmount || processedRoute.toAmount,
@@ -970,27 +970,27 @@ export class LiFiSkill extends BaseSkill {
         
         const explorerUrl = `https://explorer.buildbear.io/delicate-cannonball-45d06d30/tx/${transactionHash}`
         
-        console.log(`✅ 交易已发送，等待确认...`)
-        console.log(`   交易哈希: ${transactionHash}`)
+        console.log(`✅ Transaction sent, waiting for confirmation...`)
+        console.log(`   Transaction hash: ${transactionHash}`)
         console.log(`   Explorer URL: ${explorerUrl}`)
         
-        // 等待交易确认并获取回执
-        console.log('⏳ 等待交易确认...')
+        // Wait for transaction confirmation and get receipt
+        console.log('⏳ Waiting for transaction confirmation...')
         const receipt = await waitForTransactionReceipt(walletClient, {
           hash: transactionHash,
-          timeout: 120_000, // 2分钟超时
+          timeout: 120_000, // 2-minute timeout
         })
         
-        // 打印交易回执详情
-        console.log('✅ 交易确认成功！')
-        console.log(`   区块号: ${receipt.blockNumber}`)
-        console.log(`   区块哈希: ${receipt.blockHash}`)
-        console.log(`   交易索引: ${receipt.transactionIndex}`)
-        console.log(`   Gas 消耗: ${receipt.gasUsed}`)
-        console.log(`   状态: ${receipt.status === 'success' ? '成功' : '失败'}`)
+        // Print transaction receipt details
+        console.log('✅ Transaction confirmed successfully!')
+        console.log(`   Block number: ${receipt.blockNumber}`)
+        console.log(`   Block hash: ${receipt.blockHash}`)
+        console.log(`   Transaction index: ${receipt.transactionIndex}`)
+        console.log(`   Gas used: ${receipt.gasUsed}`)
+        console.log(`   Status: ${receipt.status === 'success' ? 'Success' : 'Failure'}`)
         
         if (receipt.status !== 'success') {
-          throw new Error(`交易执行失败，状态: ${receipt.status}`)
+          throw new Error(`Transaction execution failed, status: ${receipt.status}`)
         }
         
         const result: LiFiExecutionResult = {
@@ -1000,48 +1000,48 @@ export class LiFiSkill extends BaseSkill {
           toAmount: route.toAmount,
           bridgeName: route.steps?.[0]?.tool || 'LI.FI',
           completedAt: Date.now(),
-          note: `交易确认成功！区块号: ${receipt.blockNumber}, Gas消耗: ${receipt.gasUsed}`,
-          implementationRequired: false, // 标记为已实现
+          note: `Transaction confirmed successfully! Block number: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}`,
+          implementationRequired: false, // Mark as implemented
           retryCount: 0,
         }
         
-        // 更新状态
+        // Update status
         this.executions.set(executionId, result)
         
-        // 记录执行日志
+        // Log execution
         this.logExecution('lifi_execute', params, context, result)
         
         return result
         
       } catch (error) {
-        console.error('❌ LI.FI 跨链转移执行失败:', error)
+        console.error('❌ LI.FI cross-chain transfer execution failed:', error)
         
-        // 记录详细错误信息
+        // Record detailed error information
         if (error instanceof Error) {
-          console.error('错误详情:', {
+          console.error('Error details:', {
             message: error.message,
             stack: error.stack,
             name: error.name,
           })
         }
         
-        // 检查是否是配置问题
+        // Check if it's a configuration issue
         const errorMessage = error instanceof Error ? error.message : String(error)
         
         if (errorMessage.includes('insufficient funds')) {
-          console.log('⚠️  余额不足，请确保账户有足够的 ETH 支付 gas 费')
+          console.log('⚠️  Insufficient balance, ensure account has enough ETH for gas fees')
         }
         
         if (errorMessage.includes('user rejected')) {
-          console.log('⚠️  用户拒绝了交易')
+          console.log('⚠️  User rejected the transaction')
         }
         
         if (errorMessage.includes('allowance')) {
-          console.log('⚠️  授权不足，请先执行授权交易')
+          console.log('⚠️  Insufficient allowance, please execute approval transaction first')
         }
         
-        // 抛出错误，让外层处理
-        throw new Error(`LI.FI SDK executeRoute 执行失败: ${errorMessage}`)
+        // Throw error for outer layer to handle
+        throw new Error(`LI.FI SDK executeRoute execution failed: ${errorMessage}`)
       }
       
     } catch (error) {
@@ -1051,18 +1051,18 @@ export class LiFiSkill extends BaseSkill {
         ...execution,
         status: LiFiExecutionStatus.FAILED,
         error: error instanceof Error ? error.message : 'Unknown error',
-        note: '执行失败，请检查配置和网络连接',
+        note: 'Execution failed, please check configuration and network connection',
         implementationRequired: true,
         retryCount: 0,
       }
       
-      // 更新状态
+      // Update status
       this.executions.set(executionId, errorResult)
       
-      // 记录错误日志
+      // Log error
       this.logExecution('lifi_execute_error', params, context, {
         error: String(error),
-        // 环境变量检查
+        // Environment variable check
         hasEnvRpc: !!process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC,
       })
       
@@ -1071,13 +1071,13 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * 检查执行状态
+   * Check execution status
    */
   private async checkExecutionStatus(params: Record<string, any>, context: AgentContext): Promise<LiFiExecutionResult> {
     const { quoteId } = params
     
-    // 查找执行记录
-    const executionId = Array.from(this.executions.keys()).find(key => 
+    // Find execution record
+    const executionId = Array.from(this.executions.keys()).find(key =>
       this.executions.get(key)?.quoteId === quoteId
     )
     
@@ -1087,23 +1087,23 @@ export class LiFiSkill extends BaseSkill {
     
     const execution = this.executions.get(executionId)!
     
-    // 注意：这里需要真实的 LI.FI SDK 来检查链上状态
-    // 当前返回缓存的状态
+    // Note: Real LI.FI SDK is needed here to check on-chain status
+    // Currently returns cached status
     
     const result: LiFiExecutionResult = {
       ...execution,
-      note: '需要真实的 LI.FI SDK 实现来检查链上状态',
+      note: 'Real LI.FI SDK implementation needed to check on-chain status',
       implementationRequired: true,
     }
     
-    // 记录执行日志
+    // Log execution
     this.logExecution('lifi_check_status', params, context, result)
     
     return result
   }
   
   /**
-   * 估算转移成本
+   * Estimate transfer cost
    */
   private async estimateTransfer(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { amount, fromChainId, toChainId } = params
@@ -1115,14 +1115,14 @@ export class LiFiSkill extends BaseSkill {
     })
     
     try {
-      // 安全解析 BigInt 金额
+      // Safely parse BigInt amount
       let amountWei: bigint
       try {
-        // 默认使用 ETH 的小数位 (18)，实际应该从代币配置获取
+        // Default to ETH decimals (18), should actually get from token configuration
         const tokenDecimals = 18
         amountWei = parseUnits(amount, tokenDecimals)
         
-        // 验证金额有效性
+        // Validate amount validity
         if (amountWei <= BigInt(0)) {
           throw new Error('Amount must be greater than 0')
         }
@@ -1136,21 +1136,21 @@ export class LiFiSkill extends BaseSkill {
         throw new Error(`Failed to parse amount for estimation: ${amount}. Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
       }
       
-      // 注意：这里需要真实的 LI.FI SDK 来获取准确的估算
-      // 当前返回占位符估算
+      // Note: Real LI.FI SDK is needed here to get accurate estimates
+      // Currently returns placeholder estimates
       
       const result = {
         ...params,
-        estimatedGas: '需要真实 SDK 实现',
-        estimatedTime: '需要真实 SDK 实现',
-        estimatedCost: '需要真实 SDK 实现',
-        note: '需要真实的 LI.FI SDK 实现来获取准确估算。',
+        estimatedGas: 'Real SDK implementation needed',
+        estimatedTime: 'Real SDK implementation needed',
+        estimatedCost: 'Real SDK implementation needed',
+        note: 'Real LI.FI SDK implementation needed to get accurate estimates.',
         implementationRequired: true,
         amountParsed: amountWei.toString(),
         amountDecimals: 18,
       }
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('lifi_estimate', params, context, result)
       
       return result
@@ -1160,18 +1160,18 @@ export class LiFiSkill extends BaseSkill {
       
       const errorResult = {
         ...params,
-        estimatedGas: '估算失败',
-        estimatedTime: '估算失败',
-        estimatedCost: '估算失败',
-        note: `估算失败: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        estimatedGas: 'Estimation failed',
+        estimatedTime: 'Estimation failed',
+        estimatedCost: 'Estimation failed',
+        note: `Estimation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         implementationRequired: true,
         error: error instanceof Error ? error.message : String(error),
       }
       
-      // 记录错误日志
+      // Log error
       this.logExecution('lifi_estimate_error', params, context, {
         error: String(error),
-        // 环境变量检查
+        // Environment variable check
         hasEnvRpc: !!process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC,
       })
       
@@ -1179,21 +1179,21 @@ export class LiFiSkill extends BaseSkill {
     }
   }
   
-  // ==================== 工具方法 ====================
+  // ==================== Utility Methods ====================
 
   /**
-   * 创建 LI.FI SDK 钱包适配器
-   * 将 viem WalletClient 适配为 LI.FI SDK 所需的钱包接口
-   * 注意：LI.FI SDK 的 executeRoute 使用 structuredClone，不能克隆函数
-   * 因此我们创建一个简单的适配器，将函数调用委托给钱包客户端
+   * Create LI.FI SDK wallet adapter
+   * Adapt viem WalletClient to wallet interface required by LI.FI SDK
+   * Note: LI.FI SDK's executeRoute uses structuredClone, cannot clone functions
+   * Therefore we create a simple adapter that delegates function calls to wallet client
    */
   private createLiFiWalletAdapter(walletClient: any): any {
     console.log('Creating LI.FI wallet adapter for viem wallet client')
     
-    // 创建一个简单的适配器对象，避免函数不能被克隆的问题
-    // 我们将方法定义为返回 Promise 的函数，但使用简单的函数表达式
+    // Create a simple adapter object to avoid functions not being cloneable
+    // We define methods as functions returning Promises, using simple function expressions
     const adapter = {
-      // 获取账户地址
+      // Get account address
       getAddress: () => {
         if (!walletClient.account) {
           throw new Error('Wallet client has no account')
@@ -1201,18 +1201,18 @@ export class LiFiSkill extends BaseSkill {
         return Promise.resolve(walletClient.account.address)
       },
       
-      // 切换网络
+      // Switch network
       switchChain: (chainId: number) => {
         console.log(`LI.FI adapter: Switching to chain ${chainId}`)
-        // 在实际实现中，这里应该切换钱包的网络
-        // 由于复杂性，我们暂时只记录日志
+        // In actual implementation, should switch wallet network here
+        // Due to complexity, we just log for now
         return Promise.resolve(true)
       },
       
-      // 签名消息
+      // Sign message
       signMessage: (message: string) => {
         console.log('LI.FI adapter: Signing message')
-        // 使用钱包客户端签名消息
+        // Use wallet client to sign message
         if (walletClient.signMessage) {
           return walletClient.signMessage({
             message,
@@ -1222,7 +1222,7 @@ export class LiFiSkill extends BaseSkill {
         return Promise.reject(new Error('Wallet client does not support signMessage'))
       },
       
-      // 发送交易
+      // Send transaction
       sendTransaction: (transaction: any) => {
         console.log('LI.FI adapter: Sending transaction', {
           to: transaction.to,
@@ -1231,21 +1231,21 @@ export class LiFiSkill extends BaseSkill {
           chainId: transaction.chainId,
         })
         
-        // 使用钱包客户端发送交易
+        // Use wallet client to send transaction
         if (walletClient.sendTransaction) {
           return walletClient.sendTransaction(transaction)
         }
         
-        // 如果钱包客户端没有 sendTransaction 方法，使用 writeContract 或其他方法
+        // If wallet client doesn't have sendTransaction method, use writeContract or other methods
         return Promise.reject(new Error('Wallet client does not support sendTransaction'))
       },
       
-      // 获取链 ID
+      // Get chain ID
       getChainId: () => {
         if (walletClient.chain?.id) {
           return Promise.resolve(walletClient.chain.id)
         }
-        // 默认返回以太坊主网链 ID
+        // Default to Ethereum mainnet chain ID
         return Promise.resolve(1)
       },
     }
@@ -1254,7 +1254,7 @@ export class LiFiSkill extends BaseSkill {
   }
 
   /**
-   * 验证配置
+   * Validate configuration
    */
   private validateConfig(): void {
     const { executorAddress } = this.lifiConfig
@@ -1267,46 +1267,46 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * 验证地址格式
+   * Validate address format
    */
   private isValidAddress(address: string): boolean {
     return /^0x[a-fA-F0-9]{40}$/.test(address)
   }
   
   /**
-   * 验证金额格式
+   * Validate amount format
    */
   private isValidAmount(amount: string): boolean {
     if (!amount || typeof amount !== 'string') return false
     
-    // 检查是否为有效数字
+    // Check if it's a valid number
     const num = parseFloat(amount)
     return !isNaN(num) && num > 0
   }
   
   /**
-   * 重置技能
+   * Reset skill
    */
   protected onReset(): void {
     this.executions.clear()
   }
 }
 
-// ==================== 导出和注册 ====================
+// ==================== Export and Registration ====================
 
 /**
- * 创建并注册 LI.FI 技能实例
+ * Create and register LI.FI skill instance
  */
 export function initializeLiFiSkill(config: LiFiSkillConfig = {}): LiFiSkill {
   return createAndRegisterSkill(LiFiSkill, config)
 }
 
 /**
- * 获取 LI.FI 技能实例
+ * Get LI.FI skill instance
  */
 export async function getLiFiSkill(): Promise<LiFiSkill | undefined> {
   try {
-    // 使用 ES 模块动态导入避免循环依赖
+    // Use ES module dynamic import to avoid circular dependencies
     const { getSkillRegistry } = await import('./base-skill')
     const registry = getSkillRegistry()
     return registry.get('lifi') as LiFiSkill | undefined

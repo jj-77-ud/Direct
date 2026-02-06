@@ -1,45 +1,45 @@
 /**
- * Nomad Arc 技能抽象基类
+ * Nomad Arc Skill Abstract Base Class
  * 
- * 此文件定义了所有技能必须实现的抽象基类。
- * 遵循技能架构模式，确保 UI 与具体协议实现解耦。
+ * This file defines the abstract base class that all skills must implement.
+ * Follows the skill architecture pattern to ensure UI decoupling from specific protocol implementations.
  */
 
 import { type ISkill, type SkillMetadata, type SkillExecutionResult, type AgentContext } from '@/types/agent'
 import { type ChainId } from '@/constants/chains'
 
-// ==================== 抽象基类 ====================
+// ==================== Abstract Base Class ====================
 
 /**
- * 技能抽象基类
+ * Skill Abstract Base Class
  * 
- * 所有具体技能（ENS、LI.FI、Circle、Uniswap）都必须继承此类。
- * 提供统一的接口和通用的功能实现。
+ * All concrete skills (ENS, LI.FI, Circle, Uniswap) must inherit from this class.
+ * Provides unified interface and common functionality implementation.
  */
 export abstract class BaseSkill implements ISkill {
-  // 技能元数据（由子类提供）
+  // Skill metadata (provided by subclasses)
   abstract readonly metadata: SkillMetadata
   
-  // 技能配置
+  // Skill configuration
   protected config: Record<string, any> = {}
   
-  // 技能状态
+  // Skill state
   protected isInitialized: boolean = false
   protected lastExecutionTime: number = 0
   protected executionCount: number = 0
   
   /**
-   * 构造函数
-   * @param config 技能配置
+   * Constructor
+   * @param config Skill configuration
    */
   constructor(config: Record<string, any> = {}) {
     this.config = config
   }
   
   /**
-   * 初始化技能
+   * Initialize Skill
    * 
-   * 在技能首次使用前调用，用于设置 SDK、连接服务等。
+   * Called before first use of the skill, used for setting up SDKs, connecting services, etc.
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
@@ -57,20 +57,20 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 执行技能
+   * Execute Skill
    * 
-   * 核心执行方法，处理参数验证、执行逻辑和结果包装。
+   * Core execution method, handles parameter validation, execution logic, and result wrapping.
    */
   async execute(params: Record<string, any>, context: AgentContext): Promise<SkillExecutionResult> {
     const startTime = Date.now()
     
     try {
-      // 确保技能已初始化
+      // Ensure skill is initialized
       if (!this.isInitialized) {
         await this.initialize()
       }
       
-      // 验证参数
+      // Validate parameters
       const validation = this.validate(params)
       if (!validation.valid) {
         return {
@@ -80,7 +80,7 @@ export abstract class BaseSkill implements ISkill {
         }
       }
       
-      // 验证上下文
+      // Validate context
       const contextValidation = this.validateContext(context)
       if (!contextValidation.valid) {
         return {
@@ -90,10 +90,10 @@ export abstract class BaseSkill implements ISkill {
         }
       }
       
-      // 执行技能逻辑
+      // Execute skill logic
       const result = await this.onExecute(params, context)
       
-      // 更新执行统计
+      // Update execution statistics
       this.lastExecutionTime = Date.now()
       this.executionCount++
       
@@ -115,19 +115,19 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 验证参数
+   * Validate Parameters
    */
   validate(params: Record<string, any>): { valid: boolean; errors: string[] } {
     const errors: string[] = []
     
-    // 检查必需参数
+    // Check required parameters
     for (const param of this.metadata.requiredParams) {
       if (params[param] === undefined || params[param] === null || params[param] === '') {
         errors.push(`Missing required parameter: ${param}`)
       }
     }
     
-    // 调用子类的自定义验证
+    // Call subclass custom validation
     const customValidation = this.onValidate(params)
     if (customValidation && !customValidation.valid) {
       errors.push(...customValidation.errors)
@@ -140,17 +140,17 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 验证执行上下文
+   * Validate Execution Context
    */
   validateContext(context: AgentContext): { valid: boolean; errors: string[] } {
     const errors: string[] = []
     
-    // 检查链是否支持
+    // Check if chain is supported
     if (!this.isChainSupported(context.chainId)) {
       errors.push(`Chain ${context.chainId} is not supported by this skill`)
     }
     
-    // 检查用户地址（如果技能需要）
+    // Check user address (if skill requires it)
     if (this.metadata.requiredParams.includes('userAddress') && !context.userAddress) {
       errors.push('User address is required but not provided in context')
     }
@@ -162,7 +162,7 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 估算执行成本
+   * Estimate Execution Cost
    */
   async estimate(params: Record<string, any>, context: AgentContext): Promise<{
     gasEstimate: string
@@ -170,36 +170,36 @@ export abstract class BaseSkill implements ISkill {
     costEstimate?: string
   }> {
     try {
-      // 验证参数
+      // Validate parameters
       const validation = this.validate(params)
       if (!validation.valid) {
         throw new Error(`Invalid parameters: ${validation.errors.join(', ')}`)
       }
       
-      // 调用子类的估算逻辑
+      // Call subclass estimation logic
       return await this.onEstimate(params, context)
       
     } catch (error) {
       console.warn(`Failed to estimate for skill ${this.metadata.id}:`, error)
       
-      // 返回保守的默认估算
+      // Return conservative default estimate
       return {
         gasEstimate: '0',
-        timeEstimate: 5000, // 5秒默认
+        timeEstimate: 5000, // 5 seconds default
         costEstimate: 'Unknown',
       }
     }
   }
   
   /**
-   * 检查链是否支持
+   * Check if Chain is Supported
    */
   isChainSupported(chainId: number): boolean {
     return this.metadata.supportedChains.includes(chainId)
   }
   
   /**
-   * 获取技能状态
+   * Get Skill Status
    */
   getStatus(): {
     isInitialized: boolean
@@ -216,7 +216,7 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 重置技能状态
+   * Reset Skill State
    */
   reset(): void {
     this.isInitialized = false
@@ -225,27 +225,27 @@ export abstract class BaseSkill implements ISkill {
     this.onReset()
   }
   
-  // ==================== 抽象方法（由子类实现） ====================
+  // ==================== Abstract Methods (Implemented by Subclasses) ====================
   
   /**
-   * 初始化逻辑（子类实现）
+   * Initialization Logic (Implemented by Subclass)
    */
   protected abstract onInitialize(): Promise<void>
   
   /**
-   * 执行逻辑（子类实现）
+   * Execution Logic (Implemented by Subclass)
    */
   protected abstract onExecute(params: Record<string, any>, context: AgentContext): Promise<any>
   
   /**
-   * 自定义参数验证（子类实现，可选）
+   * Custom Parameter Validation (Implemented by Subclass, Optional)
    */
   protected onValidate(params: Record<string, any>): { valid: boolean; errors: string[] } | null {
     return null
   }
   
   /**
-   * 估算逻辑（子类实现）
+   * Estimation Logic (Implemented by Subclass)
    */
   protected abstract onEstimate(params: Record<string, any>, context: AgentContext): Promise<{
     gasEstimate: string
@@ -254,16 +254,16 @@ export abstract class BaseSkill implements ISkill {
   }>
   
   /**
-   * 重置逻辑（子类实现，可选）
+   * Reset Logic (Implemented by Subclass, Optional)
    */
   protected onReset(): void {
-    // 默认无操作
+    // Default no-op
   }
   
-  // ==================== 工具方法 ====================
+  // ==================== Utility Methods ====================
   
   /**
-   * 格式化错误信息
+   * Format Error Message
    */
   protected formatError(error: any): string {
     if (error instanceof Error) {
@@ -282,7 +282,7 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 记录技能执行日志
+   * Log Skill Execution
    */
   protected logExecution(
     action: string,
@@ -306,12 +306,12 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 清理参数（移除敏感信息）
+   * Sanitize Parameters (Remove Sensitive Information)
    */
   private sanitizeParams(params: Record<string, any>): Record<string, any> {
     const sanitized: Record<string, any> = { ...params }
     
-    // 移除可能的敏感字段
+    // Remove possible sensitive fields
     const sensitiveFields = ['privateKey', 'secret', 'password', 'mnemonic', 'seed']
     sensitiveFields.forEach(field => {
       if (field in sanitized) {
@@ -323,23 +323,23 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
-   * 清理结果
+   * Sanitize Result
    */
   private sanitizeResult(result: any): any {
     if (!result || typeof result !== 'object') {
       return result
     }
     
-    // 深度复制并清理
+    // Deep copy and sanitize
     const sanitized = JSON.parse(JSON.stringify(result))
     
-    // 可以添加更多的清理逻辑
+    // Can add more sanitization logic
     
     return sanitized
   }
   
   /**
-   * 掩码地址（保护隐私）
+   * Mask Address (Privacy Protection)
    */
   private maskAddress(address: string): string {
     if (address.length <= 10) return address
@@ -347,10 +347,10 @@ export abstract class BaseSkill implements ISkill {
   }
 }
 
-// ==================== 技能工厂 ====================
+// ==================== Skill Factory ====================
 
 /**
- * 技能注册表
+ * Skill Registry
  */
 export class SkillRegistry {
   private static instance: SkillRegistry
@@ -359,7 +359,7 @@ export class SkillRegistry {
   private constructor() {}
   
   /**
-   * 获取单例实例
+   * Get Singleton Instance
    */
   static getInstance(): SkillRegistry {
     if (!SkillRegistry.instance) {
@@ -369,7 +369,7 @@ export class SkillRegistry {
   }
   
   /**
-   * 注册技能
+   * Register Skill
    */
   register(skill: BaseSkill): void {
     if (this.skills.has(skill.metadata.id)) {
@@ -381,56 +381,56 @@ export class SkillRegistry {
   }
   
   /**
-   * 获取技能
+   * Get Skill
    */
   get(skillId: string): BaseSkill | undefined {
     return this.skills.get(skillId)
   }
   
   /**
-   * 获取所有技能
+   * Get All Skills
    */
   getAll(): BaseSkill[] {
     return Array.from(this.skills.values())
   }
   
   /**
-   * 获取技能元数据列表
+   * Get All Skill Metadata
    */
   getAllMetadata(): SkillMetadata[] {
     return this.getAll().map(skill => skill.metadata)
   }
   
   /**
-   * 检查技能是否存在
+   * Check if Skill Exists
    */
   has(skillId: string): boolean {
     return this.skills.has(skillId)
   }
   
   /**
-   * 移除技能
+   * Remove Skill
    */
   remove(skillId: string): boolean {
     return this.skills.delete(skillId)
   }
   
   /**
-   * 清空注册表
+   * Clear Registry
    */
   clear(): void {
     this.skills.clear()
   }
   
   /**
-   * 获取支持特定链的技能
+   * Get Skills Supporting Specific Chain
    */
   getSkillsForChain(chainId: number): BaseSkill[] {
     return this.getAll().filter(skill => skill.isChainSupported(chainId))
   }
   
   /**
-   * 初始化所有技能
+   * Initialize All Skills
    */
   async initializeAll(): Promise<void> {
     const skills = this.getAll()
@@ -448,10 +448,10 @@ export class SkillRegistry {
   }
 }
 
-// ==================== 工具函数 ====================
+// ==================== Utility Functions ====================
 
 /**
- * 创建技能实例并注册
+ * Create Skill Instance and Register
  */
 export function createAndRegisterSkill<T extends BaseSkill>(
   SkillClass: new (config: Record<string, any>) => T,
@@ -463,7 +463,7 @@ export function createAndRegisterSkill<T extends BaseSkill>(
 }
 
 /**
- * 获取技能注册表实例（便捷函数）
+ * Get Skill Registry Instance (Convenience Function)
  */
 export function getSkillRegistry(): SkillRegistry {
   return SkillRegistry.getInstance()

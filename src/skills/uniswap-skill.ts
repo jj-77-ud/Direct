@@ -1,10 +1,10 @@
 /**
- * Uniswap 技能实现
+ * Uniswap Skill Implementation
  *
- * 封装 Uniswap v4 交易和流动性管理逻辑。
- * 支持代币兑换、添加/移除流动性等操作。
+ * Encapsulates Uniswap v4 trading and liquidity management logic.
+ * Supports token swaps, add/remove liquidity operations.
  *
- * 奖金要求：必须展示与 Arbitrum Sepolia 上 PoolManager 的交互。
+ * Bounty requirement: Must demonstrate interaction with PoolManager on Arbitrum Sepolia.
  */
 
 import { BaseSkill, createAndRegisterSkill } from './base-skill'
@@ -18,12 +18,12 @@ import {
   ContractName
 } from '@/constants/addresses'
 
-// Uniswap v4 SDK 导入
+// Uniswap v4 SDK imports
 import * as UniswapV4SDK from '@uniswap/v4-sdk'
 import * as UniswapSDKCore from '@uniswap/sdk-core'
 import { parseUnits, formatUnits, type Hash, getAddress, keccak256, encodePacked } from 'viem'
 
-// 真实实现导入
+// Real implementation imports
 import {
   getPoolState,
   calculatePriceFromSqrtPriceX96,
@@ -40,65 +40,65 @@ import {
   type SwapParams as TransactionSwapParams
 } from '@/lib/uniswap/transaction-builder'
 
-// ==================== 技能配置 ====================
+// ==================== Skill Configuration ====================
 
 /**
- * Uniswap 技能配置
+ * Uniswap Skill Configuration
  */
 export interface UniswapSkillConfig {
-  // Uniswap v4 合约地址
-  poolManagerAddress?: Address   // PoolManager 合约地址
+  // Uniswap v4 contract addresses
+  poolManagerAddress?: Address   // PoolManager contract address
   
-  // 交易配置
-  defaultSlippage?: number       // 默认滑点容忍度（百分比）
-  defaultGasLimit?: string       // 默认 gas 限制
-  defaultDeadline?: number       // 默认交易截止时间（秒）
-  defaultRecipient?: Address     // 默认接收地址
+  // Transaction configuration
+  defaultSlippage?: number       // Default slippage tolerance (percentage)
+  defaultGasLimit?: string       // Default gas limit
+  defaultDeadline?: number       // Default transaction deadline (seconds)
+  defaultRecipient?: Address     // Default recipient address
   
-  // 重试配置
+  // Retry configuration
   maxRetries?: number
   retryDelay?: number
   
-  // 调试配置
+  // Debug configuration
   debugMode?: boolean
 }
 
-// ==================== 类型定义 ====================
+// ==================== Type Definitions ====================
 
 /**
- * 兑换参数
+ * Swap parameters
  */
 export interface SwapParams {
-  tokenIn: Address              // 输入代币地址
-  tokenOut: Address             // 输出代币地址
-  amountIn: string              // 输入金额
-  amountOutMin?: string         // 最小输出金额（考虑滑点）
-  recipient?: Address           // 接收地址
-  deadline?: number             // 交易截止时间
-  slippage?: number             // 滑点容忍度
+  tokenIn: Address              // Input token address
+  tokenOut: Address             // Output token address
+  amountIn: string              // Input amount
+  amountOutMin?: string         // Minimum output amount (considering slippage)
+  recipient?: Address           // Recipient address
+  deadline?: number             // Transaction deadline
+  slippage?: number             // Slippage tolerance
 }
 
 /**
- * 流动性参数
+ * Liquidity parameters
  */
 export interface LiquidityParams {
-  tokenA: Address               // 代币 A 地址
-  tokenB: Address               // 代币 B 地址
-  amountA: string               // 代币 A 金额
-  amountB: string               // 代币 B 金额
-  amountAMin?: string           // 代币 A 最小金额
-  amountBMin?: string           // 代币 B 最小金额
-  recipient?: Address           // 接收地址
-  deadline?: number             // 交易截止时间
+  tokenA: Address               // Token A address
+  tokenB: Address               // Token B address
+  amountA: string               // Token A amount
+  amountB: string               // Token B amount
+  amountAMin?: string           // Minimum token A amount
+  amountBMin?: string           // Minimum token B amount
+  recipient?: Address           // Recipient address
+  deadline?: number             // Transaction deadline
 }
 
 /**
- * 池信息
+ * Pool information
  */
 export interface PoolInfo {
   token0: Address
   token1: Address
-  fee: number                   // 手续费率（基点，如 3000 表示 0.3%）
+  fee: number                   // Fee rate (basis points, e.g., 3000 means 0.3%)
   tickSpacing: number
   liquidity: string
   sqrtPriceX96: string
@@ -106,56 +106,56 @@ export interface PoolInfo {
 }
 
 /**
- * 兑换结果
+ * Swap result
  */
 export interface SwapResult {
   tokenIn: Address
   tokenOut: Address
   amountIn: string
   amountOut: string
-  priceImpact: string           // 价格影响百分比
+  priceImpact: string           // Price impact percentage
   gasUsed: string
   transactionHash: string
   executedAt: number
 }
 
 /**
- * 流动性结果
+ * Liquidity result
  */
 export interface LiquidityResult {
   tokenA: Address
   tokenB: Address
   amountA: string
   amountB: string
-  liquidity: string             // 流动性代币数量
+  liquidity: string             // Liquidity token amount
   transactionHash: string
   executedAt: number
-  poolId?: string              // 池 ID（可选）
-  fee?: number                 // 手续费（可选）
-  tickLower?: number           // tick 下限（可选）
-  tickUpper?: number           // tick 上限（可选）
+  poolId?: string              // Pool ID (optional)
+  fee?: number                 // Fee (optional)
+  tickLower?: number           // Lower tick (optional)
+  tickUpper?: number           // Upper tick (optional)
 }
 
-// ==================== 技能实现 ====================
+// ==================== Skill Implementation ====================
 
 /**
- * Uniswap 技能类
+ * Uniswap Skill Class
  */
 export class UniswapSkill extends BaseSkill {
-  // 技能元数据
+  // Skill metadata
   readonly metadata: SkillMetadata = {
     id: 'uniswap',
     name: 'Uniswap v4 DEX',
-    description: '使用 Uniswap v4 进行代币兑换和流动性管理',
+    description: 'Token swapping and liquidity management using Uniswap v4',
     version: '1.0.0',
     author: 'Nomad Arc Team',
     
     capabilities: [
-      'swap',                   // 代币兑换
-      'add_liquidity',          // 添加流动性
-      'remove_liquidity',       // 移除流动性
-      'get_pool_info',          // 获取池信息
-      'get_price',              // 获取价格
+      'swap',                   // Token swapping
+      'add_liquidity',          // Add liquidity
+      'remove_liquidity',       // Remove liquidity
+      'get_pool_info',          // Get pool information
+      'get_price',              // Get price
     ],
     
     requiredParams: ['action'], // action: 'swap' | 'add_liquidity' | 'remove_liquidity' | 'pool_info' | 'price'
@@ -165,54 +165,54 @@ export class UniswapSkill extends BaseSkill {
     ],
     
     supportedChains: [
-      ChainId.ARBITRUM_SEPOLIA,  // Arbitrum Sepolia（奖金要求）
-      ChainId.ETHEREUM,          // 以太坊主网
-      ChainId.ARBITRUM,          // Arbitrum 主网
-      ChainId.BASE,              // Base 主网
-      ChainId.OPTIMISM,          // Optimism 主网
-      ChainId.POLYGON,           // Polygon 主网
+      ChainId.ARBITRUM_SEPOLIA,  // Arbitrum Sepolia (bounty requirement)
+      ChainId.ETHEREUM,          // Ethereum mainnet
+      ChainId.ARBITRUM,          // Arbitrum mainnet
+      ChainId.BASE,              // Base mainnet
+      ChainId.OPTIMISM,          // Optimism mainnet
+      ChainId.POLYGON,           // Polygon mainnet
     ],
     
     isAsync: true,
   }
   
-  // 技能特定配置
+  // Skill-specific configuration
   private uniswapConfig: Required<UniswapSkillConfig>
   
-  // Uniswap SDK 实例
+  // Uniswap SDK instance
   private uniswapSDK: any | null = null
   
   /**
-   * 构造函数
+   * Constructor
    */
   constructor(config: UniswapSkillConfig = {}) {
     super(config)
     
     this.uniswapConfig = {
-      poolManagerAddress: config.poolManagerAddress || '0x6736678280587003019D123eBE3974bb21d60768', // Arbitrum Sepolia 默认
+      poolManagerAddress: config.poolManagerAddress || '0x6736678280587003019D123eBE3974bb21d60768', // Arbitrum Sepolia default
       defaultSlippage: config.defaultSlippage || 0.5, // 0.5%
       defaultGasLimit: config.defaultGasLimit || '500000',
-      defaultDeadline: config.defaultDeadline || 30 * 60, // 30分钟
-      defaultRecipient: config.defaultRecipient || '0x0000000000000000000000000000000000000000', // 默认零地址
+      defaultDeadline: config.defaultDeadline || 30 * 60, // 30 minutes
+      defaultRecipient: config.defaultRecipient || '0x0000000000000000000000000000000000000000', // Default zero address
       maxRetries: config.maxRetries || 3,
       retryDelay: config.retryDelay || 2000,
       debugMode: config.debugMode || false,
     }
   }
   
-  // ==================== 抽象方法实现 ====================
+  // ==================== Abstract Method Implementation ====================
   
   /**
-   * 初始化 Uniswap 技能
+   * Initialize Uniswap skill
    */
   protected async onInitialize(): Promise<void> {
     console.log('Initializing Uniswap skill...')
     
     try {
-      // 初始化 Uniswap SDK
+      // Initialize Uniswap SDK
       await this.initializeUniswapSDK()
       
-      // 验证配置
+      // Validate configuration
       this.validateConfig()
       
       console.log('✅ Uniswap skill initialized successfully')
@@ -221,30 +221,30 @@ export class UniswapSkill extends BaseSkill {
       console.log('📋 Uniswap SDK status:', this.uniswapSDK ? 'Initialized' : 'Not initialized')
     } catch (error) {
       console.error('❌ Failed to initialize Uniswap skill:', error)
-      console.log('⚠️  Continuing with framework-only mode')
+      console.log('⚠️ Continuing with framework-only mode')
     }
   }
   
   /**
-   * 初始化 Uniswap SDK - 真实实现
+   * Initialize Uniswap SDK - Real implementation
    */
   private async initializeUniswapSDK(): Promise<void> {
     try {
-      console.log('🚀 初始化真实的 Uniswap v4 SDK (无模拟数据)...')
+      console.log('🚀 Initializing real Uniswap v4 SDK (no mock data)...')
       
-      // 获取配置
+      // Get configuration
       const poolManagerAddress = this.uniswapConfig.poolManagerAddress
       const chainId = ChainId.ARBITRUM_SEPOLIA
       
-      // 导入区块链客户端
+      // Import blockchain client
       const { createChainClient } = await import('@/lib/blockchain/providers')
       const publicClient = createChainClient(chainId)
       
-      // 获取代币地址并确保 checksum 格式
+      // Get token addresses and ensure checksum format
       const usdcAddress = getAddress(getUSDCAddress(chainId))
       const wethAddress = getAddress(getWETHAddress(chainId))
       
-      // 创建代币对象
+      // Create token objects
       const USDC = new UniswapSDKCore.Token(
         chainId,
         usdcAddress,
@@ -261,7 +261,7 @@ export class UniswapSkill extends BaseSkill {
         'Wrapped Ether'
       )
       
-      // 初始化真实的 Uniswap v4 SDK 包装器
+      // Initialize real Uniswap v4 SDK wrapper
       this.uniswapSDK = {
         config: {
           poolManagerAddress,
@@ -269,11 +269,11 @@ export class UniswapSkill extends BaseSkill {
           publicClient,
           tokens: { USDC, WETH }
         },
-        // 真实方法 - 使用 StateView 查询和交易构建
+        // Real methods - using StateView for queries and transaction building
         getPool: async (token0: string, token1: string, fee: number) => {
-          console.log(`🔍 获取池信息 (真实链上查询): ${token0}/${token1}, 费用: ${fee}`)
+          console.log(`🔍 Getting pool info (real on-chain query): ${token0}/${token1}, fee: ${fee}`)
           
-          // 确定代币顺序
+          // Determine token order
           const tokenA = token0.toLowerCase() === usdcAddress.toLowerCase() ? USDC :
                         token0.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                         new UniswapSDKCore.Token(chainId, token0 as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
@@ -282,18 +282,18 @@ export class UniswapSkill extends BaseSkill {
                         token1.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                         new UniswapSDKCore.Token(chainId, token1 as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
           
-          const tickSpacing = 60 // 默认 tick 间距
-          const hooks = '0x0000000000000000000000000000000000000000' // 无 hooks
+          const tickSpacing = 60 // Default tick spacing
+          const hooks = '0x0000000000000000000000000000000000000000' // No hooks
           
-          // 生成池键和池ID
+          // Generate pool key and pool ID
           const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenA, tokenB, fee, tickSpacing, hooks)
           const poolId = UniswapV4SDK.Pool.getPoolId(tokenA, tokenB, fee, tickSpacing, hooks) as Hash
           
           try {
-            // 从链上读取池状态
+            // Read pool state from chain
             const poolState = await getPoolState(chainId, poolId)
             
-            // 计算价格
+            // Calculate price
             const price = calculatePriceFromSqrtPriceX96(poolState.sqrtPriceX96)
             
             return {
@@ -310,11 +310,11 @@ export class UniswapSkill extends BaseSkill {
               protocolFee: poolState.protocolFee,
               lpFee: poolState.lpFee,
               price: price.toString(),
-              // 不再有 implementationRequired 标记
+              // No more implementationRequired flag
             }
           } catch (error) {
-            console.error('❌ 池状态查询失败，返回基础信息:', error)
-            // 如果查询失败，返回基础信息（不含链上数据）
+            console.error('❌ Pool state query failed, returning basic info:', error)
+            // If query fails, return basic info (without on-chain data)
             return {
               token0: token0,
               token1: token1,
@@ -334,11 +334,11 @@ export class UniswapSkill extends BaseSkill {
           }
         },
         getQuote: async (params: any) => {
-          console.log('💰 获取兑换报价 (真实计算):', params)
+          console.log('💰 Getting swap quote (real calculation):', params)
           
           const { tokenIn, tokenOut, amountIn, fee = 3000 } = params
           
-          // 创建代币对象
+          // Create token objects
           const tokenInObj = tokenIn.toLowerCase() === usdcAddress.toLowerCase() ? USDC :
                            tokenIn.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                            new UniswapSDKCore.Token(chainId, tokenIn as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
@@ -347,7 +347,7 @@ export class UniswapSkill extends BaseSkill {
                             tokenOut.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                             new UniswapSDKCore.Token(chainId, tokenOut as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
           
-          // 创建货币金额
+          // Create currency amount
           const amountInCurrency = UniswapSDKCore.CurrencyAmount.fromRawAmount(
             tokenInObj,
             parseUnits(amountIn, tokenInObj.decimals).toString()
@@ -356,24 +356,24 @@ export class UniswapSkill extends BaseSkill {
           const tickSpacing = 60
           const hooks = '0x0000000000000000000000000000000000000000'
           
-          // 创建池键和池ID
+          // Create pool key and pool ID
           const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenInObj, tokenOutObj, fee, tickSpacing, hooks)
           const poolId = UniswapV4SDK.Pool.getPoolId(tokenInObj, tokenOutObj, fee, tickSpacing, hooks) as Hash
           
           try {
-            // 获取池状态
+            // Get pool state
             const poolState = await getPoolState(chainId, poolId)
             
-            // 计算价格
+            // Calculate price
             const price = calculatePriceFromSqrtPriceX96(poolState.sqrtPriceX96)
             
-            // 计算输出金额（简化计算：amountOut = amountIn * price）
-            // 注意：实际实现应使用 Uniswap SDK 的 Trade 类进行精确计算
+            // Calculate output amount (simplified: amountOut = amountIn * price)
+            // Note: Real implementation should use Uniswap SDK's Trade class for precise calculation
             const amountInNum = parseFloat(amountIn)
             const amountOutNum = amountInNum * price
             
-            // 计算价格影响（简化）
-            const priceImpact = 0.1 // 简化计算，实际应根据流动性计算
+            // Calculate price impact (simplified)
+            const priceImpact = 0.1 // Simplified calculation, actual should be based on liquidity
             
             return {
               tokenIn,
@@ -395,16 +395,16 @@ export class UniswapSkill extends BaseSkill {
                 liquidity: poolState.liquidity.toString()
               },
               price: price.toString()
-              // 不再有 implementationRequired 标记
+              // No more implementationRequired flag
             }
           } catch (error) {
-            console.error('❌ 报价计算失败，返回基础报价:', error)
-            // 如果查询失败，返回基础报价
+            console.error('❌ Quote calculation failed, returning basic quote:', error)
+            // If query fails, return basic quote
             return {
               tokenIn,
               tokenOut,
               amountIn,
-              amountOut: (parseFloat(amountIn) * 0.99).toString(), // 备用计算
+              amountOut: (parseFloat(amountIn) * 0.99).toString(), // Fallback calculation
               fee,
               priceImpact: '1.0',
               route: [{
@@ -419,12 +419,12 @@ export class UniswapSkill extends BaseSkill {
           }
         },
         executeSwap: async (params: any) => {
-          console.log('🔄 执行兑换 (真实交易构建):', params)
+          console.log('🔄 Executing swap (real transaction building):', params)
           
           const { tokenIn, tokenOut, amountIn, recipient, fee = 3000, slippage = 0.5 } = params
           
           try {
-            // 创建代币对象
+            // Create token objects
             const tokenInObj = tokenIn.toLowerCase() === usdcAddress.toLowerCase() ? USDC :
                              tokenIn.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                              new UniswapSDKCore.Token(chainId, tokenIn as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
@@ -436,57 +436,57 @@ export class UniswapSkill extends BaseSkill {
             const tickSpacing = 60
             const hooks = '0x0000000000000000000000000000000000000000'
             
-            // 创建池键和池ID
+            // Create pool key and pool ID
             const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenInObj, tokenOutObj, fee, tickSpacing, hooks)
             const poolId = UniswapV4SDK.Pool.getPoolId(tokenInObj, tokenOutObj, fee, tickSpacing, hooks) as Hash
             
-            // 获取池状态
+            // Get pool state
             const poolState = await getPoolState(chainId, poolId)
             
-            // 计算滑点限制的 sqrtPriceX96
+            // Calculate slippage-limited sqrtPriceX96
             const sqrtPriceLimitX96 = calculateSqrtPriceLimitX96(
               poolState.sqrtPriceX96,
               slippage,
               true // isExactInput
             )
             
-            // 构建交易参数
+            // Build transaction parameters
             const swapParams: TransactionSwapParams = {
               tokenIn: tokenIn as Address,
               tokenOut: tokenOut as Address,
               amountIn: parseUnits(amountIn, tokenInObj.decimals),
-              amountOutMin: BigInt(0), // 实际应根据价格和滑点计算
+              amountOutMin: BigInt(0), // Actual should be calculated based on price and slippage
               recipient: recipient as Address || this.uniswapConfig.defaultRecipient as Address,
-              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600), // 1小时后
+              deadline: BigInt(Math.floor(Date.now() / 1000) + 3600), // 1 hour later
               sqrtPriceLimitX96,
               fee
             }
             
-            // 构建交易
+            // Build transaction
             const transaction = await buildSwapTransaction(chainId, swapParams)
             
-            // 注意：实际发送交易需要钱包客户端
-            // 这里返回交易构建结果，但不实际发送
+            // Note: Actual transaction sending requires wallet client
+            // Here returns transaction build result, but doesn't actually send
             return {
               transaction,
-              transactionHash: null, // 实际发送后才有哈希
+              transactionHash: null, // Will have hash after actual sending
               amountIn,
-              amountOut: '0', // 实际执行后才知道
+              amountOut: '0', // Will know after actual execution
               gasEstimate: transaction.gasEstimate.toString(),
-              priceImpact: '0', // 实际计算
+              priceImpact: '0', // Actual calculation
               poolId: poolId,
-              status: 'built', // 交易已构建，等待发送
-              // 不再有 implementationRequired 标记
+              status: 'built', // Transaction built, waiting for sending
+              // No more implementationRequired flag
             }
           } catch (error) {
-            console.error('❌ 交易构建失败:', error)
-            throw new Error(`交易构建失败: ${error instanceof Error ? error.message : String(error)}`)
+            console.error('❌ Transaction building failed:', error)
+            throw new Error(`Transaction building failed: ${error instanceof Error ? error.message : String(error)}`)
           }
         },
         getPrice: async (token0: string, token1: string) => {
-          console.log(`📊 获取价格 (真实链上查询): ${token0}/${token1}`)
+          console.log(`📊 Getting price (real on-chain query): ${token0}/${token1}`)
           
-          // 创建代币对象
+          // Create token objects
           const tokenA = token0.toLowerCase() === usdcAddress.toLowerCase() ? USDC :
                         token0.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                         new UniswapSDKCore.Token(chainId, token0 as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
@@ -495,21 +495,21 @@ export class UniswapSkill extends BaseSkill {
                         token1.toLowerCase() === wethAddress.toLowerCase() ? WETH :
                         new UniswapSDKCore.Token(chainId, token1 as `0x${string}`, 18, 'UNKNOWN', 'Unknown Token')
           
-          const fee = 3000 // 默认费用
+          const fee = 3000 // Default fee
           const tickSpacing = 60
           const hooks = '0x0000000000000000000000000000000000000000'
           
           try {
-            // 创建池键和池ID
+            // Create pool key and pool ID
             const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenA, tokenB, fee, tickSpacing, hooks)
             const poolId = UniswapV4SDK.Pool.getPoolId(tokenA, tokenB, fee, tickSpacing, hooks) as Hash
             
-            // 获取池状态
+            // Get pool state
             const poolState = await getPoolState(chainId, poolId)
             
-            // 计算价格
+            // Calculate price
             const price = calculatePriceFromSqrtPriceX96(poolState.sqrtPriceX96)
-            // 处理价格为零的情况，避免除零错误
+            // Handle zero price case to avoid division by zero
             const inversePrice = price > 0 ? 1 / price : 0
             
             return {
@@ -521,11 +521,11 @@ export class UniswapSkill extends BaseSkill {
               tick: poolState.tick,
               liquidity: poolState.liquidity.toString(),
               poolId: poolId
-              // 不再有 implementationRequired 标记
+              // No more implementationRequired flag
             }
           } catch (error) {
-            console.error('❌ 价格查询失败:', error)
-            // 如果查询失败，返回错误信息
+            console.error('❌ Price query failed:', error)
+            // If query fails, return error information
             return {
               price: '0',
               inversePrice: '0',
@@ -537,24 +537,24 @@ export class UniswapSkill extends BaseSkill {
         },
       }
       
-      console.log('✅ Uniswap v4 SDK 初始化完成 (完全真实架构)')
-      console.log('📋 PoolManager 地址:', poolManagerAddress)
-      console.log('📋 链 ID:', chainId)
-      console.log('📋 公共客户端:', publicClient ? '已初始化' : '未初始化')
-      console.log('📋 支持代币: USDC, WETH')
-      console.log('💡 注意: 使用 StateView 合约进行真实链上查询')
-      console.log('💡 注意: 使用交易构建工具进行真实交易构建')
-      console.log('✅ 所有模拟数据已移除，使用真实链上数据')
+      console.log('✅ Uniswap v4 SDK initialization completed (fully real architecture)')
+      console.log('📋 PoolManager address:', poolManagerAddress)
+      console.log('📋 Chain ID:', chainId)
+      console.log('📋 Public client:', publicClient ? 'Initialized' : 'Not initialized')
+      console.log('📋 Supported tokens: USDC, WETH')
+      console.log('💡 Note: Using StateView contract for real on-chain queries')
+      console.log('💡 Note: Using transaction builder for real transaction construction')
+      console.log('✅ All mock data removed, using real on-chain data')
       
     } catch (error) {
-      console.error('❌ Uniswap SDK 初始化失败:', error)
-      console.log('⚠️  继续使用框架模式，部分功能可能受限')
-      // 不抛出错误，允许技能继续初始化
+      console.error('❌ Uniswap SDK initialization failed:', error)
+      console.log('⚠️ Continuing with framework mode, some features may be limited')
+      // Don't throw error, allow skill to continue initialization
     }
   }
   
   /**
-   * 执行 Uniswap 操作
+   * Execute Uniswap operation
    */
   protected async onExecute(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { action } = params
@@ -586,7 +586,7 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 自定义参数验证
+   * Custom parameter validation
    */
   protected onValidate(params: Record<string, any>): { valid: boolean; errors: string[] } {
     const errors: string[] = []
@@ -597,7 +597,7 @@ export class UniswapSkill extends BaseSkill {
       return { valid: false, errors }
     }
     
-    // 根据 action 验证参数
+    // Validate parameters based on action
     if (action === 'swap') {
       if (!params.tokenIn) {
         errors.push('Missing required parameter for swap: tokenIn')
@@ -667,7 +667,7 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 估算执行成本
+   * Estimate execution cost
    */
   protected async onEstimate(params: Record<string, any>, context: AgentContext): Promise<{
     gasEstimate: string
@@ -676,9 +676,9 @@ export class UniswapSkill extends BaseSkill {
   }> {
     const { action } = params
     
-    // 根据操作类型提供不同的估算
-    let gasEstimate = '300000' // 默认估算
-    let timeEstimate = 30000   // 30秒
+    // Provide different estimates based on operation type
+    let gasEstimate = '300000' // Default estimate
+    let timeEstimate = 30000   // 30 seconds
     
     if (action === 'swap') {
       gasEstimate = '250000'
@@ -695,10 +695,10 @@ export class UniswapSkill extends BaseSkill {
     }
   }
   
-  // ==================== 具体操作方法 ====================
-  
+  // ==================== Specific Operation Methods ====================
+
   /**
-   * 执行代币兑换（奖金要求核心功能）
+   * Execute token swap (core bounty requirement functionality)
    */
   private async executeSwap(params: Record<string, any>, context: AgentContext): Promise<SwapResult> {
     const {
@@ -721,38 +721,38 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 验证参数
+      // Validate parameters
       if (!this.uniswapSDK) {
         throw new Error('Uniswap SDK not initialized')
       }
       
-      // 获取代币小数位数（假设标准代币）
+      // Get token decimals (assuming standard tokens)
       const tokenInDecimals = this.getTokenDecimals(tokenIn as Address)
       const tokenOutDecimals = this.getTokenDecimals(tokenOut as Address)
       
-      // 使用 viem 解析金额
+      // Parse amount using viem
       const amountInWei = parseUnits(amountIn, tokenInDecimals)
       
-      // 构建兑换参数
+      // Build swap parameters
       const swapParams = {
         tokenIn: tokenIn as Address,
         tokenOut: tokenOut as Address,
         amountIn: amountInWei.toString(),
         amountOutMin: amountOutMin ? parseUnits(amountOutMin, tokenOutDecimals).toString() : '0',
         recipient: recipient as Address,
-        deadline: Math.floor(deadline / 1000), // 转换为秒
+        deadline: Math.floor(deadline / 1000), // Convert to seconds
         slippageTolerance: slippage,
-        fee: 3000, // 默认 0.3% 手续费
+        fee: 3000, // Default 0.3% fee
       }
       
       console.log('📋 Swap parameters:', swapParams)
       
-      // 使用 Uniswap SDK 执行兑换
+      // Use Uniswap SDK to execute swap
       if (!this.uniswapSDK.executeSwap) {
-        throw new Error('Uniswap SDK executeSwap方法未实现，需要真实的@uniswap/v4-sdk集成')
+        throw new Error('Uniswap SDK executeSwap method not implemented, requires real @uniswap/v4-sdk integration')
       }
       
-      // 首先获取报价
+      // First get quote
       const quote = await this.uniswapSDK.getQuote({
         tokenIn: swapParams.tokenIn,
         tokenOut: swapParams.tokenOut,
@@ -760,17 +760,17 @@ export class UniswapSkill extends BaseSkill {
         fee: swapParams.fee,
       })
       
-      // 然后执行兑换
+      // Then execute swap
       const sdkResult = await this.uniswapSDK.executeSwap({
         ...swapParams,
-        amountOutMin: quote.amountOut, // 使用报价作为最小输出
+        amountOutMin: quote.amountOut, // Use quote as minimum output
       })
       
-      // 格式化输出金额
+      // Format output amount
       const amountOutFormatted = formatUnits(BigInt(sdkResult.amountOut), tokenOutDecimals)
       const amountInFormatted = formatUnits(BigInt(swapParams.amountIn), tokenInDecimals)
       
-      // 创建结果
+      // Create result
       const result: SwapResult = {
         tokenIn: tokenIn as Address,
         tokenOut: tokenOut as Address,
@@ -789,10 +789,10 @@ export class UniswapSkill extends BaseSkill {
         priceImpact: result.priceImpact,
       })
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('swap', params, context, {
         ...result,
-        note: '使用 Uniswap v4 SDK 执行的兑换',
+        note: 'Swap executed using Uniswap v4 SDK',
         implementationRequired: !this.uniswapSDK.executeSwap,
       })
       
@@ -801,7 +801,7 @@ export class UniswapSkill extends BaseSkill {
     } catch (error) {
       console.error('❌ Swap execution failed:', error)
       
-      // 返回错误结果
+      // Return error result
       const result: SwapResult = {
         tokenIn: tokenIn as Address,
         tokenOut: tokenOut as Address,
@@ -813,11 +813,11 @@ export class UniswapSkill extends BaseSkill {
         executedAt: Date.now(),
       }
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('swap', params, context, {
         ...result,
         error: error instanceof Error ? error.message : String(error),
-        note: '兑换执行失败',
+        note: 'Swap execution failed',
         implementationRequired: true,
       })
       
@@ -826,20 +826,20 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 获取代币小数位数
+   * Get token decimals
    */
   private getTokenDecimals(tokenAddress: Address): number {
-    // 常见代币的小数位数
+    // Common token decimals
     const commonTokens: Record<string, number> = {
-      [getUSDCAddress(ChainId.ARBITRUM_SEPOLIA).toLowerCase()]: 6,  // USDC: 6 位小数
-      [getWETHAddress(ChainId.ARBITRUM_SEPOLIA).toLowerCase()]: 18, // WETH: 18 位小数
+      [getUSDCAddress(ChainId.ARBITRUM_SEPOLIA).toLowerCase()]: 6,  // USDC: 6 decimals
+      [getWETHAddress(ChainId.ARBITRUM_SEPOLIA).toLowerCase()]: 18, // WETH: 18 decimals
     }
     
-    return commonTokens[tokenAddress.toLowerCase()] || 18 // 默认 18 位小数
+    return commonTokens[tokenAddress.toLowerCase()] || 18 // Default 18 decimals
   }
   
   /**
-   * 添加流动性
+   * Add liquidity
    */
   private async addLiquidity(params: Record<string, any>, context: AgentContext): Promise<LiquidityResult> {
     const {
@@ -851,12 +851,12 @@ export class UniswapSkill extends BaseSkill {
       amountBMin,
       recipient = context.userAddress,
       deadline = Date.now() + this.uniswapConfig.defaultDeadline * 1000,
-      fee = 3000, // 默认 0.3% 手续费
-      tickLower = -887220, // 默认 tick 下限
-      tickUpper = 887220,  // 默认 tick 上限
+      fee = 3000, // Default 0.3% fee
+      tickLower = -887220, // Default tick lower bound
+      tickUpper = 887220,  // Default tick upper bound
     } = params
     
-    console.log('💧 添加 Uniswap 流动性:', {
+    console.log('💧 Adding Uniswap liquidity:', {
       tokenA,
       tokenB,
       amountA,
@@ -867,20 +867,20 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 验证参数
+      // Validate parameters
       if (!this.uniswapSDK) {
-        throw new Error('Uniswap SDK 未初始化')
+        throw new Error('Uniswap SDK not initialized')
       }
       
-      // 获取代币小数位数
+      // Get token decimals
       const tokenADecimals = this.getTokenDecimals(tokenA as Address)
       const tokenBDecimals = this.getTokenDecimals(tokenB as Address)
       
-      // 使用 viem 解析金额
+      // Parse amounts using viem
       const amountAWei = parseUnits(amountA, tokenADecimals)
       const amountBWei = parseUnits(amountB, tokenBDecimals)
       
-      console.log('📋 流动性参数:', {
+      console.log('📋 Liquidity parameters:', {
         tokenA,
         tokenB,
         amountAWei: amountAWei.toString(),
@@ -892,11 +892,11 @@ export class UniswapSkill extends BaseSkill {
         deadline: Math.floor(deadline / 1000),
       })
       
-      // 使用真实的 Uniswap v4 SDK 构建添加流动性交易
-      // 获取链 ID
+      // Build add liquidity transaction using real Uniswap v4 SDK
+      // Get chain ID
       const chainId = ChainId.ARBITRUM_SEPOLIA
       
-      // 创建代币对象
+      // Create token objects
       const tokenAObj = new UniswapSDKCore.Token(
         chainId,
         tokenA as `0x${string}`,
@@ -913,7 +913,7 @@ export class UniswapSkill extends BaseSkill {
         'Token B'
       )
       
-      // 创建货币金额
+      // Create currency amounts
       const amountACurrency = UniswapSDKCore.CurrencyAmount.fromRawAmount(
         tokenAObj,
         amountAWei.toString()
@@ -924,23 +924,23 @@ export class UniswapSkill extends BaseSkill {
         amountBWei.toString()
       )
       
-      // 创建池键
+      // Create pool key
       const tickSpacing = 60
       const hooks = '0x0000000000000000000000000000000000000000'
       const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenAObj, tokenBObj, fee, tickSpacing, hooks)
       const poolId = UniswapV4SDK.Pool.getPoolId(tokenAObj, tokenBObj, fee, tickSpacing, hooks)
       
-      // 使用 V4PositionPlanner 规划流动性添加
-      // 注意：实际实现需要构建完整的交易数据
-      console.log('🔧 使用 V4PositionPlanner 规划流动性添加...')
+      // Plan liquidity addition using V4PositionPlanner
+      // Note: Actual implementation requires building complete transaction data
+      console.log('🔧 Planning liquidity addition using V4PositionPlanner...')
       console.log('   Pool Key:', poolKey)
       console.log('   Pool ID:', poolId)
       console.log('   Tick Range:', { tickLower, tickUpper })
       
-      // 模拟交易执行（实际需要钱包签名）
+      // Simulate transaction execution (actual execution requires wallet signing)
       const transactionHash = '0x' + Math.random().toString(16).slice(2, 66).padEnd(64, '0')
       
-      // 计算流动性数量（简化计算）
+      // Calculate liquidity amount (simplified calculation)
       const liquidityAmount = Math.min(
         parseFloat(amountA) * Math.pow(10, tokenADecimals),
         parseFloat(amountB) * Math.pow(10, tokenBDecimals)
@@ -960,7 +960,7 @@ export class UniswapSkill extends BaseSkill {
         tickUpper,
       }
       
-      console.log(`✅ 流动性添加成功:`, {
+      console.log(`✅ Liquidity added successfully:`, {
         transactionHash: result.transactionHash,
         amountA: result.amountA,
         amountB: result.amountB,
@@ -968,20 +968,20 @@ export class UniswapSkill extends BaseSkill {
         poolId: result.poolId,
       })
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('add_liquidity', params, context, {
         ...result,
-        note: '使用真实的 Uniswap v4 SDK 类添加流动性（需要钱包签名完成实际交易）',
-        implementationRequired: true, // 标记为需要真实链上执行
+        note: 'Added liquidity using real Uniswap v4 SDK classes (requires wallet signing for actual transaction)',
+        implementationRequired: true, // Marked as requiring real on-chain execution
         sdkClassesUsed: ['Token', 'CurrencyAmount', 'Pool.getPoolKey', 'Pool.getPoolId', 'V4PositionPlanner'],
       })
       
       return result
       
     } catch (error) {
-      console.error('❌ 添加流动性失败:', error)
+      console.error('❌ Failed to add liquidity:', error)
       
-      // 返回错误结果
+      // Return error result
       const result: LiquidityResult = {
         tokenA: tokenA as Address,
         tokenB: tokenB as Address,
@@ -992,11 +992,11 @@ export class UniswapSkill extends BaseSkill {
         executedAt: Date.now(),
       }
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('add_liquidity', params, context, {
         ...result,
         error: error instanceof Error ? error.message : String(error),
-        note: '添加流动性失败',
+        note: 'Failed to add liquidity',
         implementationRequired: true,
       })
       
@@ -1005,23 +1005,23 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 移除流动性
+   * Remove liquidity
    */
   private async removeLiquidity(params: Record<string, any>, context: AgentContext): Promise<LiquidityResult> {
     const {
       tokenA,
       tokenB,
-      liquidity, // 流动性代币数量
+      liquidity, // Liquidity token amount
       amountAMin,
       amountBMin,
       recipient = context.userAddress,
       deadline = Date.now() + this.uniswapConfig.defaultDeadline * 1000,
-      fee = 3000, // 默认 0.3% 手续费
-      tickLower = -887220, // 默认 tick 下限
-      tickUpper = 887220,  // 默认 tick 上限
+      fee = 3000, // Default 0.3% fee
+      tickLower = -887220, // Default tick lower bound
+      tickUpper = 887220,  // Default tick upper bound
     } = params
     
-    console.log('💧 移除 Uniswap 流动性:', {
+    console.log('💧 Removing Uniswap liquidity:', {
       tokenA,
       tokenB,
       liquidity,
@@ -1031,16 +1031,16 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 验证参数
+      // Validate parameters
       if (!this.uniswapSDK) {
-        throw new Error('Uniswap SDK 未初始化')
+        throw new Error('Uniswap SDK not initialized')
       }
       
       if (!liquidity) {
-        throw new Error('缺少必要参数: liquidity')
+        throw new Error('Missing required parameter: liquidity')
       }
       
-      console.log('📋 移除流动性参数:', {
+      console.log('📋 Remove liquidity parameters:', {
         tokenA,
         tokenB,
         liquidity,
@@ -1051,15 +1051,15 @@ export class UniswapSkill extends BaseSkill {
         deadline: Math.floor(deadline / 1000),
       })
       
-      // 使用真实的 Uniswap v4 SDK 构建移除流动性交易
-      // 获取链 ID
+      // Build remove liquidity transaction using real Uniswap v4 SDK
+      // Get chain ID
       const chainId = ChainId.ARBITRUM_SEPOLIA
       
-      // 获取代币小数位数
+      // Get token decimals
       const tokenADecimals = this.getTokenDecimals(tokenA as Address)
       const tokenBDecimals = this.getTokenDecimals(tokenB as Address)
       
-      // 创建代币对象
+      // Create token objects
       const tokenAObj = new UniswapSDKCore.Token(
         chainId,
         tokenA as `0x${string}`,
@@ -1076,27 +1076,27 @@ export class UniswapSkill extends BaseSkill {
         'Token B'
       )
       
-      // 创建池键
+      // Create pool key
       const tickSpacing = 60
       const hooks = '0x0000000000000000000000000000000000000000'
       const poolKey = UniswapV4SDK.Pool.getPoolKey(tokenAObj, tokenBObj, fee, tickSpacing, hooks)
       const poolId = UniswapV4SDK.Pool.getPoolId(tokenAObj, tokenBObj, fee, tickSpacing, hooks)
       
-      // 使用 V4PositionPlanner 规划流动性移除
-      // 注意：实际实现需要构建完整的交易数据
-      console.log('🔧 使用 V4PositionPlanner 规划流动性移除...')
+      // Plan liquidity removal using V4PositionPlanner
+      // Note: Actual implementation requires building complete transaction data
+      console.log('🔧 Planning liquidity removal using V4PositionPlanner...')
       console.log('   Pool Key:', poolKey)
       console.log('   Pool ID:', poolId)
       console.log('   Tick Range:', { tickLower, tickUpper })
       console.log('   Liquidity to remove:', liquidity)
       
-      // 模拟交易执行（实际需要钱包签名）
+      // Simulate transaction execution (actual execution requires wallet signing)
       const transactionHash = '0x' + Math.random().toString(16).slice(2, 66).padEnd(64, '0')
       
-      // 计算返回的代币数量（简化计算）
+      // Calculate returned token amounts (simplified calculation)
       const liquidityNum = parseFloat(liquidity)
-      const amountA = (liquidityNum / 1000).toFixed(6) // 模拟计算
-      const amountB = (liquidityNum / 1000 * 0.5).toFixed(6) // 模拟计算
+      const amountA = (liquidityNum / 1000).toFixed(6) // Simulated calculation
+      const amountB = (liquidityNum / 1000 * 0.5).toFixed(6) // Simulated calculation
       
       const result: LiquidityResult = {
         tokenA: tokenA as Address,
@@ -1112,7 +1112,7 @@ export class UniswapSkill extends BaseSkill {
         tickUpper,
       }
       
-      console.log(`✅ 流动性移除成功:`, {
+      console.log(`✅ Liquidity removed successfully:`, {
         transactionHash: result.transactionHash,
         amountA: result.amountA,
         amountB: result.amountB,
@@ -1120,20 +1120,20 @@ export class UniswapSkill extends BaseSkill {
         poolId: result.poolId,
       })
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('remove_liquidity', params, context, {
         ...result,
-        note: '使用真实的 Uniswap v4 SDK 类移除流动性（需要钱包签名完成实际交易）',
-        implementationRequired: true, // 标记为需要真实链上执行
+        note: 'Removed liquidity using real Uniswap v4 SDK classes (requires wallet signing for actual transaction)',
+        implementationRequired: true, // Marked as requiring real on-chain execution
         sdkClassesUsed: ['Token', 'Pool.getPoolKey', 'Pool.getPoolId', 'V4PositionPlanner'],
       })
       
       return result
       
     } catch (error) {
-      console.error('❌ 移除流动性失败:', error)
+      console.error('❌ Failed to remove liquidity:', error)
       
-      // 返回错误结果
+      // Return error result
       const result: LiquidityResult = {
         tokenA: tokenA as Address,
         tokenB: tokenB as Address,
@@ -1144,11 +1144,11 @@ export class UniswapSkill extends BaseSkill {
         executedAt: Date.now(),
       }
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('remove_liquidity', params, context, {
         ...result,
         error: error instanceof Error ? error.message : String(error),
-        note: '移除流动性失败',
+        note: 'Failed to remove liquidity',
         implementationRequired: true,
       })
       
@@ -1157,7 +1157,7 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 获取池信息
+   * Get pool information
    */
   private async getPoolInfo(params: Record<string, any>, context: AgentContext): Promise<PoolInfo> {
     const { tokenA, tokenB, fee = 3000 } = params
@@ -1170,9 +1170,9 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 使用 Uniswap SDK 获取池信息
+      // Use Uniswap SDK to get pool info
       if (!this.uniswapSDK?.getPool) {
-        throw new Error('Uniswap SDK getPool方法未实现，需要真实的@uniswap/v4-sdk集成')
+        throw new Error('Uniswap SDK getPool method not implemented, requires real @uniswap/v4-sdk integration')
       }
       
       const poolInfo = await this.uniswapSDK.getPool(
@@ -1181,7 +1181,7 @@ export class UniswapSkill extends BaseSkill {
         Number(fee)
       )
       
-      // 验证 PoolManager 地址（奖金要求）
+      // Verify PoolManager address (bounty requirement)
       const poolManagerAddress = getUniswapV4PoolManagerAddress(context.chainId)
       
       const result: PoolInfo = {
@@ -1202,11 +1202,11 @@ export class UniswapSkill extends BaseSkill {
         poolManagerAddress,
       })
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('pool_info', params, context, {
         ...result,
         poolManagerAddress,
-        note: '使用 Uniswap v4 SDK 获取的池信息',
+        note: 'Pool information retrieved using Uniswap v4 SDK',
         implementationRequired: !this.uniswapSDK?.getPool,
       })
       
@@ -1215,7 +1215,7 @@ export class UniswapSkill extends BaseSkill {
     } catch (error) {
       console.error('❌ Failed to get pool info:', error)
       
-      // 返回默认池信息
+      // Return default pool info
       const result: PoolInfo = {
         token0: tokenA as Address,
         token1: tokenB as Address,
@@ -1226,11 +1226,11 @@ export class UniswapSkill extends BaseSkill {
         tick: 0,
       }
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('pool_info', params, context, {
         ...result,
         error: error instanceof Error ? error.message : String(error),
-        note: '池信息获取失败',
+        note: 'Failed to retrieve pool information',
         implementationRequired: true,
       })
       
@@ -1239,7 +1239,7 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 获取价格
+   * Get price
    */
   private async getPrice(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { tokenA, tokenB, amount = '1' } = params
@@ -1252,9 +1252,9 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 使用 Uniswap SDK 获取价格
+      // Use Uniswap SDK to get price
       if (!this.uniswapSDK?.getPrice) {
-        throw new Error('Uniswap SDK getPrice方法未实现，需要真实的@uniswap/v4-sdk集成')
+        throw new Error('Uniswap SDK getPrice method not implemented, requires real @uniswap/v4-sdk integration')
       }
       
       const priceData = await this.uniswapSDK.getPrice(
@@ -1262,7 +1262,7 @@ export class UniswapSkill extends BaseSkill {
         tokenB as Address
       )
       
-      // 计算指定数量的价格
+      // Calculate price for specified amount
       const amountNum = parseFloat(amount)
       const priceNum = parseFloat(priceData.price)
       const inversePriceNum = parseFloat(priceData.inversePrice)
@@ -1275,7 +1275,7 @@ export class UniswapSkill extends BaseSkill {
         inversePrice: priceData.inversePrice,
         amountInTermsOfB: (amountNum * priceNum).toFixed(6),
         amountInTermsOfA: (amountNum * inversePriceNum).toFixed(6),
-        note: '使用 Uniswap v4 SDK 获取的价格',
+        note: 'Price retrieved using Uniswap v4 SDK',
         implementationRequired: !this.uniswapSDK?.getPrice,
       }
       
@@ -1286,7 +1286,7 @@ export class UniswapSkill extends BaseSkill {
         amountInTermsOfB: result.amountInTermsOfB,
       })
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('price', params, context, result)
       
       return result
@@ -1303,11 +1303,11 @@ export class UniswapSkill extends BaseSkill {
         amountInTermsOfB: '0',
         amountInTermsOfA: '0',
         error: error instanceof Error ? error.message : String(error),
-        note: '价格获取失败',
+        note: 'Failed to retrieve price',
         implementationRequired: true,
       }
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('price', params, context, result)
       
       return result
@@ -1315,7 +1315,7 @@ export class UniswapSkill extends BaseSkill {
   }
 
   /**
-   * 获取兑换报价
+   * Get swap quote
    */
   private async getQuote(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { tokenIn, tokenOut, amountIn, fee = 3000, slippage = 0.5 } = params
@@ -1330,9 +1330,9 @@ export class UniswapSkill extends BaseSkill {
     })
     
     try {
-      // 使用 Uniswap SDK 获取报价
+      // Use Uniswap SDK to get quote
       if (!this.uniswapSDK?.getQuote) {
-        throw new Error('Uniswap SDK getQuote方法未实现，需要真实的@uniswap/v4-sdk集成')
+        throw new Error('Uniswap SDK getQuote method not implemented, requires real @uniswap/v4-sdk integration')
       }
       
       const quoteData = await this.uniswapSDK.getQuote({
@@ -1352,7 +1352,7 @@ export class UniswapSkill extends BaseSkill {
         slippage,
         priceImpact: quoteData.priceImpact || '0',
         route: quoteData.route || [],
-        note: '使用 Uniswap v4 SDK 获取的报价',
+        note: 'Quote retrieved using Uniswap v4 SDK',
         implementationRequired: !this.uniswapSDK?.getQuote,
       }
       
@@ -1363,7 +1363,7 @@ export class UniswapSkill extends BaseSkill {
         priceImpact: result.priceImpact,
       })
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('getQuote', params, context, result)
       
       return result
@@ -1381,11 +1381,11 @@ export class UniswapSkill extends BaseSkill {
         priceImpact: '0',
         route: [],
         error: error instanceof Error ? error.message : String(error),
-        note: '报价获取失败',
+        note: 'Failed to retrieve quote',
         implementationRequired: true,
       }
       
-      // 记录执行日志
+      // Record execution log
       this.logExecution('getQuote', params, context, result)
       
       return result
@@ -1395,7 +1395,7 @@ export class UniswapSkill extends BaseSkill {
   // ==================== 工具方法 ====================
   
   /**
-   * 验证配置
+   * Validate configuration
    */
   private validateConfig(): void {
     const { poolManagerAddress } = this.uniswapConfig
@@ -1408,25 +1408,25 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 验证地址格式
+   * Validate address format
    */
   private isValidAddress(address: string): boolean {
     return /^0x[a-fA-F0-9]{40}$/.test(address)
   }
   
   /**
-   * 验证金额格式
+   * Validate amount format
    */
   private isValidAmount(amount: string): boolean {
     if (!amount || typeof amount !== 'string') return false
     
-    // 检查是否为有效数字
+    // Check if it's a valid number
     const num = parseFloat(amount)
     return !isNaN(num) && num > 0
   }
   
   /**
-   * 获取默认代币地址
+   * Get default token address
    */
   private getDefaultTokenAddress(chainId: number, symbol: string): Address {
     try {
@@ -1436,10 +1436,10 @@ export class UniswapSkill extends BaseSkill {
         return getWETHAddress(chainId)
       }
     } catch (error) {
-      // 如果 addresses.ts 中没有定义，返回占位符
+      // If not defined in addresses.ts, return placeholder
     }
     
-    // 返回测试网默认地址
+    // Return testnet default addresses
     if (chainId === ChainId.ARBITRUM_SEPOLIA) {
       if (symbol === 'USDC') return '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d' as Address
       if (symbol === 'WETH') return '0xEe01c0CD76354C383B8c7B4e65EA88D00B06f36f' as Address
@@ -1449,24 +1449,24 @@ export class UniswapSkill extends BaseSkill {
   }
 
   /**
-   * 计算池 ID（确保对 token 地址进行排序后再进行哈希计算）
-   * 根据 Uniswap v4 规范：池 ID = keccak256(abi.encode(token0, token1, fee, tickSpacing, hooks))
-   * 其中 token0 < token1（按地址排序）
+   * Compute pool ID (ensure token addresses are sorted before hashing)
+   * According to Uniswap v4 specification: pool ID = keccak256(abi.encode(token0, token1, fee, tickSpacing, hooks))
+   * where token0 < token1 (sorted by address)
    */
   private computePoolId(tokenA: Address, tokenB: Address, fee: number): Hash {
-    // 确保地址为 checksum 格式
+    // Ensure addresses are in checksum format
     const token0 = getAddress(tokenA)
     const token1 = getAddress(tokenB)
     
-    // 排序 token 地址
+    // Sort token addresses
     const [sortedToken0, sortedToken1] = token0.toLowerCase() < token1.toLowerCase()
       ? [token0, token1]
       : [token1, token0]
     
-    const tickSpacing = 60 // 默认 tick 间距
-    const hooks = '0x0000000000000000000000000000000000000000' // 无 hooks
+    const tickSpacing = 60 // Default tick spacing
+    const hooks = '0x0000000000000000000000000000000000000000' // No hooks
     
-    // 使用 viem 的 encodePacked 和 keccak256 计算池 ID
+    // Compute pool ID using viem's encodePacked and keccak256
     const encoded = encodePacked(
       ['address', 'address', 'uint24', 'int24', 'address'],
       [sortedToken0, sortedToken1, fee, tickSpacing, hooks]
@@ -1474,7 +1474,7 @@ export class UniswapSkill extends BaseSkill {
     
     const poolId = keccak256(encoded) as Hash
     
-    console.log('🔢 计算池 ID:', {
+    console.log('🔢 Computing pool ID:', {
       tokenA,
       tokenB,
       sortedToken0,
@@ -1489,28 +1489,28 @@ export class UniswapSkill extends BaseSkill {
   }
   
   /**
-   * 重置技能
+   * Reset skill
    */
   protected onReset(): void {
-    // 无状态需要重置
+    // No state needs to be reset
   }
 }
 
-// ==================== 导出和注册 ====================
+// ==================== Export and Registration ====================
 
 /**
- * 创建并注册 Uniswap 技能实例
+ * Create and register Uniswap skill instance
  */
 export function initializeUniswapSkill(config: UniswapSkillConfig = {}): UniswapSkill {
   return createAndRegisterSkill(UniswapSkill, config)
 }
 
 /**
- * 获取 Uniswap 技能实例
+ * Get Uniswap skill instance
  */
 export async function getUniswapSkill(): Promise<UniswapSkill | undefined> {
   try {
-    // 使用 ES 模块动态导入避免循环依赖
+    // Use ES module dynamic import to avoid circular dependencies
     const { getSkillRegistry } = await import('./base-skill')
     const registry = getSkillRegistry()
     return registry.get('uniswap') as UniswapSkill | undefined

@@ -1,8 +1,8 @@
 /**
- * Nomad Arc 意图解析器
+ * Nomad Arc Intent Parser
  * 
- * 此文件提供了基于 DeepSeek AI 的意图解析服务。
- * 负责将自然语言指令转换为结构化的区块链操作意图。
+ * This file provides DeepSeek AI-based intent parsing service.
+ * Responsible for converting natural language instructions into structured blockchain operation intents.
  */
 
 import { getDeepSeekClient, type NomadDeepSeekClient } from './deepseek-client'
@@ -17,7 +17,7 @@ import {
 } from '@/types/intent'
 
 /**
- * 意图解析结果
+ * Intent Parsing Result
  */
 export interface IntentParserResult {
   intent: NomadIntent | null
@@ -28,32 +28,32 @@ export interface IntentParserResult {
 }
 
 /**
- * 意图解析器配置
+ * Intent Parser Configuration
  */
 export interface IntentParserConfig {
   /**
-   * 是否启用缓存
+   * Whether to enable caching
    */
   enableCache?: boolean
   
   /**
-   * 缓存最大大小
+   * Maximum cache size
    */
   maxCacheSize?: number
   
   /**
-   * 最小置信度阈值
+   * Minimum confidence threshold
    */
   minConfidence?: number
   
   /**
-   * 是否启用详细日志
+   * Whether to enable verbose logging
    */
   verbose?: boolean
 }
 
 /**
- * 默认配置
+ * Default Configuration
  */
 const DEFAULT_CONFIG: IntentParserConfig = {
   enableCache: true,
@@ -63,7 +63,7 @@ const DEFAULT_CONFIG: IntentParserConfig = {
 }
 
 /**
- * 缓存条目
+ * Cache Entry
  */
 interface CacheEntry {
   intent: NomadIntent | null
@@ -73,7 +73,7 @@ interface CacheEntry {
 }
 
 /**
- * Nomad Arc 意图解析器
+ * Nomad Arc Intent Parser
  */
 export class IntentParser {
   private client: NomadDeepSeekClient
@@ -87,19 +87,19 @@ export class IntentParser {
   }
 
   /**
-   * 解析自然语言指令
+   * Parse Natural Language Instruction
    */
   async parse(userInput: string): Promise<IntentParserResult> {
     const startTime = Date.now()
     
     try {
-      // 检查缓存
+      // Check cache
       const cacheKey = this.generateCacheKey(userInput)
       if (this.config.enableCache) {
         const cached = this.cache.get(cacheKey)
         if (cached && this.isCacheValid(cached)) {
           if (this.config.verbose) {
-            console.log(`[IntentParser] 使用缓存结果: ${cacheKey}`)
+            console.log(`[IntentParser] Using cached result: ${cacheKey}`)
           }
           return {
             intent: cached.intent,
@@ -112,20 +112,20 @@ export class IntentParser {
       }
 
       if (this.config.verbose) {
-        console.log(`[IntentParser] 解析指令: "${userInput}"`)
+        console.log(`[IntentParser] Parsing instruction: "${userInput}"`)
       }
 
-      // 调用 DeepSeek 客户端进行解析
+      // Call DeepSeek client for parsing
       const result = await this.client.parseIntent(userInput)
       
-      // 检查置信度阈值
+      // Check confidence threshold
       if (result.confidence < (this.config.minConfidence || 0)) {
         if (this.config.verbose) {
-          console.warn(`[IntentParser] 置信度过低: ${result.confidence} < ${this.config.minConfidence}`)
+          console.warn(`[IntentParser] Confidence too low: ${result.confidence} < ${this.config.minConfidence}`)
         }
       }
 
-      // 缓存结果
+      // Cache result
       if (this.config.enableCache && result.intent) {
         this.addToCache(cacheKey, {
           intent: result.intent,
@@ -144,12 +144,12 @@ export class IntentParser {
       }
 
     } catch (error) {
-      console.error('[IntentParser] 解析失败:', error)
+      console.error('[IntentParser] Parsing failed:', error)
       
       return {
         intent: null,
         confidence: 0,
-        error: error instanceof Error ? error.message : '解析过程中发生未知错误',
+        error: error instanceof Error ? error.message : 'Unknown error occurred during parsing',
         executionTime: Date.now() - startTime,
         cached: false,
       }
@@ -157,7 +157,7 @@ export class IntentParser {
   }
 
   /**
-   * 批量解析多个指令
+   * Batch Parse Multiple Instructions
    */
   async parseBatch(inputs: string[]): Promise<IntentParserResult[]> {
     const results: IntentParserResult[] = []
@@ -171,7 +171,7 @@ export class IntentParser {
   }
 
   /**
-   * 验证意图是否完整
+   * Validate Intent Completeness
    */
   validateIntent(intent: NomadIntent): {
     isValid: boolean
@@ -181,48 +181,48 @@ export class IntentParser {
     const errors: string[] = []
     const warnings: string[] = []
 
-    // 基本验证
+    // Basic validation
     if (!intent.id) {
-      errors.push('意图缺少 ID')
+      errors.push('Intent missing ID')
     }
 
     if (!intent.type) {
-      errors.push('意图缺少类型')
+      errors.push('Intent missing type')
     }
 
     if (!intent.description) {
-      warnings.push('意图缺少描述')
+      warnings.push('Intent missing description')
     }
 
     if (!intent.chainId) {
-      warnings.push('意图缺少链 ID，将使用默认链')
+      warnings.push('Intent missing chain ID, will use default chain')
     }
 
-    // 类型特定验证 - 使用类型守卫安全访问
+    // Type-specific validation - use type guards for safe access
     if (isSwapIntent(intent)) {
       if (!intent.params.fromToken || !intent.params.toToken) {
-        errors.push('兑换意图缺少代币信息')
+        errors.push('Swap intent missing token information')
       }
       if (!intent.params.amountIn) {
-        errors.push('兑换意图缺少输入金额')
+        errors.push('Swap intent missing input amount')
       }
     } else if (isBridgeIntent(intent)) {
       if (!intent.params.fromChainId || !intent.params.toChainId) {
-        errors.push('跨链意图缺少链 ID 信息')
+        errors.push('Bridge intent missing chain ID information')
       }
       if (!intent.params.token) {
-        errors.push('跨链意图缺少代币信息')
+        errors.push('Bridge intent missing token information')
       }
     } else if (isCctpIntent(intent)) {
       if (!intent.params.fromChainId || !intent.params.toChainId) {
-        errors.push('CCTP 跨链意图缺少链 ID 信息')
+        errors.push('CCTP cross-chain intent missing chain ID information')
       }
       if (!intent.params.amount) {
-        errors.push('CCTP 跨链意图缺少金额信息')
+        errors.push('CCTP cross-chain intent missing amount information')
       }
     } else if (isResolveEnsIntent(intent)) {
       if (!intent.params.domain) {
-        errors.push('ENS 解析意图缺少域名')
+        errors.push('ENS resolution intent missing domain')
       }
     }
 
@@ -234,7 +234,7 @@ export class IntentParser {
   }
 
   /**
-   * 获取跨链路径建议
+   * Get Cross-Chain Path Recommendation
    */
   async getCrossChainRecommendation(params: {
     fromChainId: number
@@ -251,7 +251,7 @@ export class IntentParser {
   }
 
   /**
-   * 生成交易解释
+   * Generate Transaction Explanation
    */
   async generateTransactionExplanation(params: {
     intentType: string
@@ -263,19 +263,19 @@ export class IntentParser {
   }
 
   /**
-   * 测试 AI 服务连接
+   * Test AI Service Connection
    */
   async testConnection(): Promise<boolean> {
     try {
       return await this.client.testConnection()
     } catch (error) {
-      console.error('[IntentParser] AI 服务连接测试失败:', error)
+      console.error('[IntentParser] AI service connection test failed:', error)
       return false
     }
   }
 
   /**
-   * 获取解析统计信息
+   * Get Parsing Statistics
    */
   getStats(): {
     totalParsed: number
@@ -297,77 +297,77 @@ export class IntentParser {
     
     return {
       totalParsed: totalCount,
-      cacheHits: 0, // 需要在实际使用中跟踪
+      cacheHits: 0, // Need to track in actual usage
       cacheSize: this.cache.size,
       averageConfidence,
     }
   }
 
   /**
-   * 清空缓存
+   * Clear Cache
    */
   clearCache(): void {
     this.cache.clear()
     if (this.config.verbose) {
-      console.log('[IntentParser] 缓存已清空')
+      console.log('[IntentParser] Cache cleared')
     }
   }
 
   /**
-   * 获取当前配置
+   * Get Current Configuration
    */
   getConfig(): IntentParserConfig {
     return { ...this.config }
   }
 
   /**
-   * 更新配置
+   * Update Configuration
    */
   updateConfig(newConfig: Partial<IntentParserConfig>): void {
     this.config = { ...this.config, ...newConfig }
     
-    // 如果禁用了缓存，清空现有缓存
+    // If caching is disabled, clear existing cache
     if (newConfig.enableCache === false) {
       this.clearCache()
     }
     
     if (this.config.verbose) {
-      console.log('[IntentParser] 配置已更新:', this.config)
+      console.log('[IntentParser] Configuration updated:', this.config)
     }
   }
 
-  // ==================== 私有方法 ====================
+  // ==================== Private Methods ====================
 
   /**
-   * 生成缓存键
+   * Generate Cache Key
    */
   private generateCacheKey(userInput: string): string {
-    // 简单哈希函数
+    // Simple hash function
     let hash = 0
     for (let i = 0; i < userInput.length; i++) {
       const char = userInput.charCodeAt(i)
       hash = ((hash << 5) - hash) + char
-      hash = hash & hash // 转换为32位整数
+      hash = hash & hash // Convert to 32-bit integer
     }
     return `intent_${hash.toString(16)}`
   }
 
   /**
-   * 检查缓存是否有效
+   * Check if Cache is Valid
    */
   private isCacheValid(entry: CacheEntry): boolean {
-    // 缓存有效期为5分钟
-    const cacheTTL = 5 * 60 * 1000 // 5分钟
+    // Cache validity period is 5 minutes
+    const cacheTTL = 5 * 60 * 1000 // 5 minutes
     return Date.now() - entry.timestamp < cacheTTL
   }
 
   /**
-   * 添加到缓存
+   * Add to Cache
    */
   private addToCache(key: string, entry: CacheEntry): void {
-    // 检查缓存大小限制
+    // Check cache size limit
     if (this.cache.size >= (this.config.maxCacheSize || 100)) {
-      // 移除最旧的条目
+      // Remove oldest entry
       let oldestKey = ''
       let oldestTime = Date.now()
       
@@ -386,17 +386,17 @@ export class IntentParser {
     this.cache.set(key, entry)
     
     if (this.config.verbose) {
-      console.log(`[IntentParser] 已缓存结果: ${key}`)
+      console.log(`[IntentParser] Result cached: ${key}`)
     }
   }
 }
 
-// ==================== 单例实例 ====================
+// ==================== Singleton Instance ====================
 
 let globalInstance: IntentParser | null = null
 
 /**
- * 获取全局意图解析器实例
+ * Get Global Intent Parser Instance
  */
 export function getIntentParser(config?: IntentParserConfig): IntentParser {
   if (!globalInstance) {
@@ -406,7 +406,7 @@ export function getIntentParser(config?: IntentParserConfig): IntentParser {
 }
 
 /**
- * 创建新的意图解析器实例
+ * Create New Intent Parser Instance
  */
 export function createIntentParser(config: IntentParserConfig): IntentParser {
   return new IntentParser(config)

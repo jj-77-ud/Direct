@@ -1,34 +1,34 @@
 /**
- * 技能管理器
- * 
- * 解决技能初始化循环依赖问题，提供统一的技能初始化接口。
- * 确保技能按正确顺序初始化，避免循环依赖导致的注册表为空问题。
+ * Skill Manager
+ *
+ * Solves circular dependency issues in skill initialization, provides a unified skill initialization interface.
+ * Ensures skills are initialized in the correct order, avoiding empty registry issues caused by circular dependencies.
  */
 
 import { SkillRegistry } from './base-skill'
 import { type BaseSkill } from './base-skill'
 
 /**
- * 技能初始化配置
+ * Skill Initialization Configuration
  */
 export interface SkillManagerConfig {
   /**
-   * 是否启用自动初始化
+   * Whether to enable auto-initialization
    */
   autoInitialize?: boolean
   
   /**
-   * 初始化超时时间（毫秒）
+   * Initialization timeout (milliseconds)
    */
   initializationTimeout?: number
   
   /**
-   * 是否启用详细日志
+   * Whether to enable verbose logging
    */
   verbose?: boolean
   
   /**
-   * 技能特定配置
+   * Skill-specific configurations
    */
   skillConfigs?: {
     ens?: Record<string, any>
@@ -39,7 +39,7 @@ export interface SkillManagerConfig {
 }
 
 /**
- * 技能初始化状态
+ * Skill Initialization Status
  */
 export interface SkillInitializationStatus {
   skillId: string
@@ -50,7 +50,7 @@ export interface SkillInitializationStatus {
 }
 
 /**
- * 技能管理器类
+ * Skill Manager Class
  */
 export class SkillManager {
   private static instance: SkillManager
@@ -71,7 +71,7 @@ export class SkillManager {
   }
   
   /**
-   * 获取单例实例
+   * Get singleton instance
    */
   static getInstance(config?: SkillManagerConfig): SkillManager {
     if (!SkillManager.instance) {
@@ -81,7 +81,7 @@ export class SkillManager {
   }
   
   /**
-   * 初始化状态跟踪
+   * Initialize status tracking
    */
   private initializeStatusTracking(): void {
     const skillIds = ['ens', 'lifi', 'circle', 'uniswap']
@@ -96,32 +96,32 @@ export class SkillManager {
   }
   
   /**
-   * 获取技能依赖关系
+   * Get skill dependencies
    */
   private getSkillDependencies(skillId: string): string[] {
-    // 定义技能之间的依赖关系
+    // Define dependencies between skills
     const dependencyMap: Record<string, string[]> = {
-      ens: [],           // ENS 技能无依赖
-      lifi: ['ens'],     // LI.FI 可能依赖 ENS 进行地址解析
-      circle: ['ens'],   // Circle 可能依赖 ENS
-      uniswap: ['ens']   // Uniswap 可能依赖 ENS
+      ens: [],           // ENS skill has no dependencies
+      lifi: ['ens'],     // LI.FI may depend on ENS for address resolution
+      circle: ['ens'],   // Circle may depend on ENS
+      uniswap: ['ens']   // Uniswap may depend on ENS
     }
     
     return dependencyMap[skillId] || []
   }
   
   /**
-   * 初始化所有技能
+   * Initialize all skills
    */
   async initializeAllSkills(): Promise<void> {
     if (this.isInitialized) {
       if (this.config.verbose) {
-        console.log('🔄 技能已初始化，跳过')
+        console.log('🔄 Skills already initialized, skipping')
       }
       return
     }
     
-    // 如果已经在初始化中，返回相同的 Promise
+    // If already initializing, return the same Promise
     if (this.initializationPromise) {
       return this.initializationPromise
     }
@@ -131,17 +131,17 @@ export class SkillManager {
   }
   
   /**
-   * 实际初始化所有技能（内部方法）
+   * Actually initialize all skills (internal method)
    */
   private async _initializeAllSkills(): Promise<void> {
     const startTime = Date.now()
     
     if (this.config.verbose) {
-      console.log('🚀 开始初始化所有技能...')
+      console.log('🚀 Starting initialization of all skills...')
     }
     
     try {
-      // 按依赖顺序初始化技能
+      // Initialize skills in dependency order
       const initializationOrder = [
         this.initializeEnsSkill.bind(this),
         this.initializeLiFiSkill.bind(this),
@@ -153,27 +153,27 @@ export class SkillManager {
         await this.withTimeout(
           initFn(),
           this.config.initializationTimeout,
-          '技能初始化超时'
+          'Skill initialization timeout'
         )
       }
       
-      // 初始化技能注册表中的所有技能
+      // Initialize all skills in the skill registry
       const registry = SkillRegistry.getInstance()
       await registry.initializeAll()
       
-      // 验证所有技能是否已初始化
+      // Validate that all skills are initialized
       await this.validateInitialization()
       
       this.isInitialized = true
       const endTime = Date.now()
       
       if (this.config.verbose) {
-        console.log(`✅ 所有技能初始化完成 (${endTime - startTime}ms)`)
+        console.log(`✅ All skills initialization completed (${endTime - startTime}ms)`)
         this.printInitializationStatus()
       }
       
     } catch (error) {
-      console.error('❌ 技能初始化失败:', error)
+      console.error('❌ Skill initialization failed:', error)
       throw error
     } finally {
       this.initializationPromise = null
@@ -181,134 +181,134 @@ export class SkillManager {
   }
   
   /**
-   * 初始化 ENS 技能
+   * Initialize ENS skill
    */
   private async initializeEnsSkill(): Promise<void> {
     const skillId = 'ens'
     
     try {
       if (this.config.verbose) {
-        console.log(`🔄 初始化 ${skillId} 技能...`)
+        console.log(`🔄 Initializing ${skillId} skill...`)
       }
       
-      // 动态导入以避免循环依赖
+      // Dynamic import to avoid circular dependencies
       const { initializeEnsSkill } = await import('./ens-skill')
       const skill = initializeEnsSkill(this.config.skillConfigs?.ens || {})
       
-      // 更新状态
+      // Update status
       this.updateSkillStatus(skillId, true)
       
       if (this.config.verbose) {
-        console.log(`✅ ${skillId} 技能初始化成功`)
+        console.log(`✅ ${skillId} skill initialized successfully`)
       }
       
     } catch (error) {
       this.updateSkillStatus(skillId, false, error instanceof Error ? error.message : String(error))
-      throw new Error(`ENS 技能初始化失败: ${error}`)
+      throw new Error(`ENS skill initialization failed: ${error}`)
     }
   }
   
   /**
-   * 初始化 LI.FI 技能
+   * Initialize LI.FI skill
    */
   private async initializeLiFiSkill(): Promise<void> {
     const skillId = 'lifi'
     
     try {
       if (this.config.verbose) {
-        console.log(`🔄 初始化 ${skillId} 技能...`)
+        console.log(`🔄 Initializing ${skillId} skill...`)
       }
       
-      // 检查依赖是否已初始化
+      // Check if dependency is initialized
       if (!this.isSkillInitialized('ens')) {
-        throw new Error('依赖技能 ens 未初始化')
+        throw new Error('Dependency skill ens not initialized')
       }
       
-      // 动态导入以避免循环依赖
+      // Dynamic import to avoid circular dependencies
       const { initializeLiFiSkill } = await import('./lifi-skill')
       const skill = initializeLiFiSkill(this.config.skillConfigs?.lifi || {})
       
-      // 更新状态
+      // Update status
       this.updateSkillStatus(skillId, true)
       
       if (this.config.verbose) {
-        console.log(`✅ ${skillId} 技能初始化成功`)
+        console.log(`✅ ${skillId} skill initialized successfully`)
       }
       
     } catch (error) {
       this.updateSkillStatus(skillId, false, error instanceof Error ? error.message : String(error))
-      throw new Error(`LI.FI 技能初始化失败: ${error}`)
+      throw new Error(`LI.FI skill initialization failed: ${error}`)
     }
   }
   
   /**
-   * 初始化 Circle 技能
+   * Initialize Circle skill
    */
   private async initializeCircleSkill(): Promise<void> {
     const skillId = 'circle'
     
     try {
       if (this.config.verbose) {
-        console.log(`🔄 初始化 ${skillId} 技能...`)
+        console.log(`🔄 Initializing ${skillId} skill...`)
       }
       
-      // 检查依赖是否已初始化
+      // Check if dependency is initialized
       if (!this.isSkillInitialized('ens')) {
-        throw new Error('依赖技能 ens 未初始化')
+        throw new Error('Dependency skill ens not initialized')
       }
       
-      // 动态导入以避免循环依赖
+      // Dynamic import to avoid circular dependencies
       const { initializeCircleSkill } = await import('./circle-skill')
       const skill = initializeCircleSkill(this.config.skillConfigs?.circle || {})
       
-      // 更新状态
+      // Update status
       this.updateSkillStatus(skillId, true)
       
       if (this.config.verbose) {
-        console.log(`✅ ${skillId} 技能初始化成功`)
+        console.log(`✅ ${skillId} skill initialized successfully`)
       }
       
     } catch (error) {
       this.updateSkillStatus(skillId, false, error instanceof Error ? error.message : String(error))
-      throw new Error(`Circle 技能初始化失败: ${error}`)
+      throw new Error(`Circle skill initialization failed: ${error}`)
     }
   }
   
   /**
-   * 初始化 Uniswap 技能
+   * Initialize Uniswap skill
    */
   private async initializeUniswapSkill(): Promise<void> {
     const skillId = 'uniswap'
     
     try {
       if (this.config.verbose) {
-        console.log(`🔄 初始化 ${skillId} 技能...`)
+        console.log(`🔄 Initializing ${skillId} skill...`)
       }
       
-      // 检查依赖是否已初始化
+      // Check if dependency is initialized
       if (!this.isSkillInitialized('ens')) {
-        throw new Error('依赖技能 ens 未初始化')
+        throw new Error('Dependency skill ens not initialized')
       }
       
-      // 动态导入以避免循环依赖
+      // Dynamic import to avoid circular dependencies
       const { initializeUniswapSkill } = await import('./uniswap-skill')
       const skill = initializeUniswapSkill(this.config.skillConfigs?.uniswap || {})
       
-      // 更新状态
+      // Update status
       this.updateSkillStatus(skillId, true)
       
       if (this.config.verbose) {
-        console.log(`✅ ${skillId} 技能初始化成功`)
+        console.log(`✅ ${skillId} skill initialized successfully`)
       }
       
     } catch (error) {
       this.updateSkillStatus(skillId, false, error instanceof Error ? error.message : String(error))
-      throw new Error(`Uniswap 技能初始化失败: ${error}`)
+      throw new Error(`Uniswap skill initialization failed: ${error}`)
     }
   }
   
   /**
-   * 更新技能状态
+   * Update skill status
    */
   private updateSkillStatus(skillId: string, isInitialized: boolean, error?: string): void {
     const status = this.initializationStatus.get(skillId)
@@ -321,7 +321,7 @@ export class SkillManager {
   }
   
   /**
-   * 检查技能是否已初始化
+   * Check if skill is initialized
    */
   private isSkillInitialized(skillId: string): boolean {
     const status = this.initializationStatus.get(skillId)
@@ -329,7 +329,7 @@ export class SkillManager {
   }
   
   /**
-   * 验证所有技能初始化
+   * Validate all skill initialization
    */
   private async validateInitialization(): Promise<void> {
     const registry = SkillRegistry.getInstance()
@@ -344,21 +344,21 @@ export class SkillManager {
       } else {
         const status = skill.getStatus()
         if (!status.isInitialized) {
-          missingSkills.push(`${skillId} (未初始化)`)
+          missingSkills.push(`${skillId} (not initialized)`)
         }
       }
     }
     
     if (missingSkills.length > 0) {
-      throw new Error(`以下技能未正确初始化: ${missingSkills.join(', ')}`)
+      throw new Error(`The following skills were not properly initialized: ${missingSkills.join(', ')}`)
     }
   }
   
   /**
-   * 打印初始化状态
+   * Print initialization status
    */
   private printInitializationStatus(): void {
-    console.log('\n📊 技能初始化状态:')
+    console.log('\n📊 Skill initialization status:')
     console.log('='.repeat(50))
     
     const registry = SkillRegistry.getInstance()
@@ -368,24 +368,24 @@ export class SkillManager {
       const skillStatus = skill?.getStatus()
       
       console.log(`🔹 ${skillId}:`)
-      console.log(`   注册状态: ${skill ? '✅ 已注册' : '❌ 未注册'}`)
-      console.log(`   初始化状态: ${status.isInitialized ? '✅ 已初始化' : '❌ 未初始化'}`)
+      console.log(`   Registration status: ${skill ? '✅ Registered' : '❌ Not registered'}`)
+      console.log(`   Initialization status: ${status.isInitialized ? '✅ Initialized' : '❌ Not initialized'}`)
       
       if (status.isInitialized && status.initializationTime) {
-        console.log(`   初始化时间: ${new Date(status.initializationTime).toISOString()}`)
+        console.log(`   Initialization time: ${new Date(status.initializationTime).toISOString()}`)
       }
       
       if (skillStatus) {
-        console.log(`   执行次数: ${skillStatus.executionCount}`)
-        console.log(`   支持链: ${skillStatus.supportedChains.length} 条`)
+        console.log(`   Execution count: ${skillStatus.executionCount}`)
+        console.log(`   Supported chains: ${skillStatus.supportedChains.length} chains`)
       }
       
       if (status.error) {
-        console.log(`   错误: ${status.error}`)
+        console.log(`   Error: ${status.error}`)
       }
       
       if (status.dependencies.length > 0) {
-        console.log(`   依赖: ${status.dependencies.join(', ')}`)
+        console.log(`   Dependencies: ${status.dependencies.join(', ')}`)
       }
       
       console.log()
@@ -393,7 +393,7 @@ export class SkillManager {
   }
   
   /**
-   * 带超时的 Promise 包装器
+   * Promise wrapper with timeout
    */
   private async withTimeout<T>(
     promise: Promise<T>,
@@ -408,7 +408,7 @@ export class SkillManager {
   }
   
   /**
-   * 获取技能实例
+   * Get skill instance
    */
   getSkill<T extends BaseSkill>(skillId: string): T | undefined {
     const registry = SkillRegistry.getInstance()
@@ -416,7 +416,7 @@ export class SkillManager {
   }
   
   /**
-   * 获取所有技能
+   * Get all skills
    */
   getAllSkills(): BaseSkill[] {
     const registry = SkillRegistry.getInstance()
@@ -424,21 +424,21 @@ export class SkillManager {
   }
   
   /**
-   * 获取初始化状态
+   * Get initialization status
    */
   getInitializationStatus(): SkillInitializationStatus[] {
     return Array.from(this.initializationStatus.values())
   }
   
   /**
-   * 检查是否已初始化
+   * Check if all are initialized
    */
   isInitializedAll(): boolean {
     return this.isInitialized
   }
   
   /**
-   * 重置技能管理器状态
+   * Reset skill manager state
    */
   reset(): void {
     this.isInitialized = false
@@ -446,13 +446,13 @@ export class SkillManager {
     this.initializeStatusTracking()
     
     if (this.config.verbose) {
-      console.log('🔄 技能管理器状态已重置')
+      console.log('🔄 Skill manager state has been reset')
     }
   }
 }
 
 /**
- * 获取全局技能管理器实例
+ * Get global skill manager instance
  */
 let globalSkillManager: SkillManager | null = null
 
@@ -464,14 +464,14 @@ export function getSkillManager(config?: SkillManagerConfig): SkillManager {
 }
 
 /**
- * 创建新的技能管理器实例
+ * Create new skill manager instance
  */
 export function createSkillManager(config: SkillManagerConfig): SkillManager {
   return SkillManager.getInstance(config)
 }
 
 /**
- * 初始化所有技能的便捷函数
+ * Convenience function to initialize all skills
  */
 export async function initializeAllSkills(config?: SkillManagerConfig): Promise<void> {
   const skillManager = getSkillManager(config)

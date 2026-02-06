@@ -1,19 +1,19 @@
 /**
- * Nomad Arc 区块链类型定义
+ * Nomad Arc Blockchain Type Definitions
  *
- * 此文件定义了与区块链交互相关的类型，包括交易、合约、事件等。
- * 使用基础类型以避免循环依赖。
+ * This file defines types related to blockchain interactions, including transactions, contracts, events, etc.
+ * Uses base types to avoid circular dependencies.
  */
 
 import { type Address, type Hash, type TokenInfo, type BlockchainNetwork } from './base'
 
-// ==================== 基础类型 ====================
+// ==================== Basic Types ====================
 
-// 重新导出基础类型
+// Re-export base types
 export type { Address, Hash, TokenInfo, BlockchainNetwork }
 
 /**
- * 代币标准
+ * Token Standard
  */
 export enum TokenStandard {
   ERC20 = 'ERC20',
@@ -23,221 +23,221 @@ export enum TokenStandard {
 }
 
 /**
- * 代币余额信息
+ * Token Balance Information
  */
 export interface TokenBalance {
-  token: TokenInfo             // 代币信息
-  balance: bigint              // 原始余额
-  formatted: string            // 格式化后的余额
-  valueUSD?: string            // 美元价值（可选）
+  token: TokenInfo             // Token information
+  balance: bigint              // Raw balance
+  formatted: string            // Formatted balance
+  valueUSD?: string            // USD value (optional)
 }
 
-// ==================== 交易相关类型 ====================
+// ==================== Transaction Related Types ====================
 
 /**
- * 交易状态
+ * Transaction Status
  */
 export enum TransactionStatus {
-  PENDING = 'PENDING',         // 等待中
-  CONFIRMED = 'CONFIRMED',     // 已确认
-  FAILED = 'FAILED',           // 失败
-  REVERTED = 'REVERTED',       // 回滚
-  DROPPED = 'DROPPED',         // 被丢弃
+  PENDING = 'PENDING',         // Pending
+  CONFIRMED = 'CONFIRMED',     // Confirmed
+  FAILED = 'FAILED',           // Failed
+  REVERTED = 'REVERTED',       // Reverted
+  DROPPED = 'DROPPED',         // Dropped
 }
 
 /**
- * 交易类型
+ * Transaction Type
  */
 export enum TransactionType {
-  TRANSFER = 'TRANSFER',       // 转账
-  SWAP = 'SWAP',               // 兑换
-  APPROVAL = 'APPROVAL',       // 授权
-  BRIDGE = 'BRIDGE',           // 跨链
-  CONTRACT_INTERACTION = 'CONTRACT_INTERACTION', // 合约交互
-  MULTICALL = 'MULTICALL',     // 多调用
+  TRANSFER = 'TRANSFER',       // Transfer
+  SWAP = 'SWAP',               // Swap
+  APPROVAL = 'APPROVAL',       // Approval
+  BRIDGE = 'BRIDGE',           // Bridge
+  CONTRACT_INTERACTION = 'CONTRACT_INTERACTION', // Contract interaction
+  MULTICALL = 'MULTICALL',     // Multicall
 }
 
 /**
- * 交易请求
+ * Transaction Request
  */
 export interface TransactionRequest {
-  from: Address                // 发送方地址
-  to: Address                  // 接收方地址（合约地址）
-  value?: bigint               // 发送的 ETH 数量
-  data?: Hash                  // 交易数据
-  gasLimit?: bigint            // gas 限制
-  gasPrice?: bigint            // gas 价格
-  maxFeePerGas?: bigint        // 最大每 gas 费用
-  maxPriorityFeePerGas?: bigint // 最大优先费用
-  nonce?: number               // nonce
-  chainId: number              // 链 ID
+  from: Address                // Sender address
+  to: Address                  // Recipient address (contract address)
+  value?: bigint               // Amount of ETH to send
+  data?: Hash                  // Transaction data
+  gasLimit?: bigint            // Gas limit
+  gasPrice?: bigint            // Gas price
+  maxFeePerGas?: bigint        // Max fee per gas
+  maxPriorityFeePerGas?: bigint // Max priority fee
+  nonce?: number               // Nonce
+  chainId: number              // Chain ID
 }
 
 /**
- * 交易响应
+ * Transaction Response
  */
 export interface TransactionResponse {
-  hash: Hash                   // 交易哈希
-  status: TransactionStatus    // 交易状态
-  from: Address                // 发送方
-  to?: Address                 // 接收方
-  value?: string               // 转账金额
-  gasUsed?: string             // 使用的 gas
-  gasPrice?: string            // gas 价格
-  blockNumber?: number         // 区块号
-  blockHash?: Hash             // 区块哈希
-  timestamp?: number           // 时间戳
-  confirmations: number        // 确认数
-  receipt?: TransactionReceipt // 交易收据
-  error?: string               // 错误信息
+  hash: Hash                   // Transaction hash
+  status: TransactionStatus    // Transaction status
+  from: Address                // Sender
+  to?: Address                 // Recipient
+  value?: string               // Transfer amount
+  gasUsed?: string             // Gas used
+  gasPrice?: string            // Gas price
+  blockNumber?: number         // Block number
+  blockHash?: Hash             // Block hash
+  timestamp?: number           // Timestamp
+  confirmations: number        // Confirmations
+  receipt?: TransactionReceipt // Transaction receipt
+  error?: string               // Error message
 }
 
 /**
- * 交易收据
+ * Transaction Receipt
  */
 export interface TransactionReceipt {
-  transactionHash: Hash        // 交易哈希
-  transactionIndex: number     // 交易索引
-  blockHash: Hash              // 区块哈希
-  blockNumber: number          // 区块号
-  from: Address                // 发送方
-  to?: Address                 // 接收方
-  cumulativeGasUsed: bigint    // 累计使用的 gas
-  gasUsed: bigint              // 实际使用的 gas
-  effectiveGasPrice: bigint    // 有效的 gas 价格
-  contractAddress?: Address    // 合约地址（如果是部署合约）
-  logs: Log[]                  // 日志
-  logsBloom: string            // logs bloom
-  status: 'success' | 'reverted' // 状态
-  type: string                 // 交易类型
+  transactionHash: Hash        // Transaction hash
+  transactionIndex: number     // Transaction index
+  blockHash: Hash              // Block hash
+  blockNumber: number          // Block number
+  from: Address                // Sender
+  to?: Address                 // Recipient
+  cumulativeGasUsed: bigint    // Cumulative gas used
+  gasUsed: bigint              // Actual gas used
+  effectiveGasPrice: bigint    // Effective gas price
+  contractAddress?: Address    // Contract address (if contract deployment)
+  logs: Log[]                  // Logs
+  logsBloom: string            // Logs bloom
+  status: 'success' | 'reverted' // Status
+  type: string                 // Transaction type
 }
 
-// ==================== 事件和日志类型 ====================
+// ==================== Event and Log Types ====================
 
 /**
- * 日志条目
+ * Log Entry
  */
 export interface Log {
-  address: Address             // 合约地址
-  topics: Hash[]               // 主题
-  data: Hash                   // 数据
-  blockNumber: number          // 区块号
-  transactionHash: Hash        // 交易哈希
-  transactionIndex: number     // 交易索引
-  blockHash: Hash              // 区块哈希
-  logIndex: number             // 日志索引
-  removed?: boolean            // 是否被移除
+  address: Address             // Contract address
+  topics: Hash[]               // Topics
+  data: Hash                   // Data
+  blockNumber: number          // Block number
+  transactionHash: Hash        // Transaction hash
+  transactionIndex: number     // Transaction index
+  blockHash: Hash              // Block hash
+  logIndex: number             // Log index
+  removed?: boolean            // Whether removed
 }
 
 /**
- * 事件过滤器
+ * Event Filter
  */
 export interface EventFilter {
-  address?: Address            // 合约地址
-  topics?: (Hash | Hash[] | null)[] // 主题过滤器
-  fromBlock?: bigint | 'latest' | 'earliest' | 'pending' // 起始区块
-  toBlock?: bigint | 'latest' | 'earliest' | 'pending'   // 结束区块
+  address?: Address            // Contract address
+  topics?: (Hash | Hash[] | null)[] // Topic filter
+  fromBlock?: bigint | 'latest' | 'earliest' | 'pending' // Start block
+  toBlock?: bigint | 'latest' | 'earliest' | 'pending'   // End block
 }
 
-// ==================== 合约相关类型 ====================
+// ==================== Contract Related Types ====================
 
 /**
- * 合约 ABI 条目
+ * Contract ABI Entry
  */
 export interface ContractABIEntry {
   type: 'function' | 'event' | 'constructor' | 'fallback' | 'receive'
-  name?: string               // 函数/事件名称
+  name?: string               // Function/event name
   inputs?: Array<{
-    name: string              // 参数名称
-    type: string              // 参数类型
-    internalType?: string     // 内部类型
-    components?: any[]        // 组件（用于结构体）
+    name: string              // Parameter name
+    type: string              // Parameter type
+    internalType?: string     // Internal type
+    components?: any[]        // Components (for structs)
   }>
   outputs?: Array<{
-    name: string              // 输出名称
-    type: string              // 输出类型
-    internalType?: string     // 内部类型
+    name: string              // Output name
+    type: string              // Output type
+    internalType?: string     // Internal type
   }>
-  stateMutability?: 'pure' | 'view' | 'nonpayable' | 'payable' // 状态可变性
-  anonymous?: boolean         // 是否匿名事件
+  stateMutability?: 'pure' | 'view' | 'nonpayable' | 'payable' // State mutability
+  anonymous?: boolean         // Whether anonymous event
 }
 
 /**
- * 合约信息
+ * Contract Information
  */
 export interface ContractInfo {
-  address: Address            // 合约地址
-  name: string                // 合约名称
-  abi: ContractABIEntry[]     // 合约 ABI
-  chainId: number             // 链 ID
-  deployedBlock: number       // 部署区块
-  verified: boolean           // 是否已验证
-  sourceCode?: string         // 源代码（如果已验证）
+  address: Address            // Contract address
+  name: string                // Contract name
+  abi: ContractABIEntry[]     // Contract ABI
+  chainId: number             // Chain ID
+  deployedBlock: number       // Deployment block
+  verified: boolean           // Whether verified
+  sourceCode?: string         // Source code (if verified)
 }
 
 /**
- * 合约调用选项
+ * Contract Call Options
  */
 export interface ContractCallOptions {
-  from?: Address              // 调用方地址
-  value?: bigint              // 发送的 ETH
-  gasLimit?: bigint           // gas 限制
-  gasPrice?: bigint           // gas 价格
-  blockTag?: 'latest' | 'earliest' | 'pending' | bigint // 区块标签
+  from?: Address              // Caller address
+  value?: bigint              // ETH to send
+  gasLimit?: bigint           // Gas limit
+  gasPrice?: bigint           // Gas price
+  blockTag?: 'latest' | 'earliest' | 'pending' | bigint // Block tag
 }
 
-// ==================== 跨链相关类型 ====================
+// ==================== Cross-Chain Related Types ====================
 
 /**
- * 跨链桥接路线
+ * Cross-Chain Bridge Route
  */
 export interface BridgeRoute {
-  id: string                  // 路线 ID
-  fromChain: number           // 源链 ID
-  toChain: number             // 目标链 ID
-  fromToken: TokenInfo        // 源代币
-  toToken: TokenInfo          // 目标代币
-  bridgeProvider: string      // 桥接提供商（如 LI.FI, Circle CCTP）
+  id: string                  // Route ID
+  fromChain: number           // Source chain ID
+  toChain: number             // Destination chain ID
+  fromToken: TokenInfo        // Source token
+  toToken: TokenInfo          // Destination token
+  bridgeProvider: string      // Bridge provider (e.g., LI.FI, Circle CCTP)
   
-  // 费用信息
-  feeAmount: string           // 费用金额
-  feePercentage: number       // 费用百分比
-  estimatedTime: number       // 预计时间（秒）
+  // Fee information
+  feeAmount: string           // Fee amount
+  feePercentage: number       // Fee percentage
+  estimatedTime: number       // Estimated time (seconds)
   
-  // 交易信息
-  steps: BridgeStep[]         // 桥接步骤
-  transactionRequest?: TransactionRequest // 交易请求
+  // Transaction information
+  steps: BridgeStep[]         // Bridge steps
+  transactionRequest?: TransactionRequest // Transaction request
 }
 
 /**
- * 桥接步骤
+ * Bridge Step
  */
 export interface BridgeStep {
-  type: 'swap' | 'bridge' | 'approval' | 'deposit' | 'withdraw' // 步骤类型
-  description: string         // 步骤描述
-  chainId: number             // 链 ID
-  tool: string                // 使用的工具
+  type: 'swap' | 'bridge' | 'approval' | 'deposit' | 'withdraw' // Step type
+  description: string         // Step description
+  chainId: number             // Chain ID
+  tool: string                // Tool used
   estimate: {
-    gas: string               // 预计 gas
-    time: number              // 预计时间（秒）
-    cost: string              // 预计成本
+    gas: string               // Estimated gas
+    time: number              // Estimated time (seconds)
+    cost: string              // Estimated cost
   }
 }
 
 /**
- * 跨链报价
+ * Cross-Chain Quote
  */
 export interface CrossChainQuote {
-  routes: BridgeRoute[]       // 可用路线
-  bestRoute: BridgeRoute      // 最佳路线
-  timestamp: number           // 报价时间戳
-  validity: number            // 有效期（秒）
+  routes: BridgeRoute[]       // Available routes
+  bestRoute: BridgeRoute      // Best route
+  timestamp: number           // Quote timestamp
+  validity: number            // Validity period (seconds)
 }
 
-// ==================== 工具类型 ====================
+// ==================== Utility Types ====================
 
 /**
- * 创建代币信息（兼容性函数）
+ * Create Token Information (compatibility function)
  */
 export function createTokenInfo(
   address: Address,
@@ -258,7 +258,7 @@ export function createTokenInfo(
 }
 
 /**
- * 格式化 gas 价格
+ * Format Gas Price
  */
 export function formatGasPrice(wei: bigint): string {
   const gwei = wei / BigInt(1e9)
@@ -266,7 +266,7 @@ export function formatGasPrice(wei: bigint): string {
 }
 
 /**
- * 估算交易成本
+ * Estimate Transaction Cost
  */
 export function estimateTransactionCost(
   gasLimit: bigint,
@@ -296,14 +296,14 @@ export function estimateTransactionCost(
 }
 
 /**
- * 验证地址格式
+ * Validate Address Format
  */
 export function isValidAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address)
 }
 
 /**
- * 缩短地址显示
+ * Shorten Address Display
  */
 export function shortenAddress(address: Address, chars = 4): string {
   if (!address) return ''
@@ -311,7 +311,7 @@ export function shortenAddress(address: Address, chars = 4): string {
 }
 
 /**
- * 检查两个地址是否相等（不区分大小写）
+ * Check if Two Addresses are Equal (case-insensitive)
  */
 export function areAddressesEqual(a: Address, b: Address): boolean {
   return a.toLowerCase() === b.toLowerCase()

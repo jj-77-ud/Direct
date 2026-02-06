@@ -1,12 +1,12 @@
 /**
- * Circle CCTP 技能实现
+ * Circle CCTP Skill Implementation
  *
- * 封装 Circle Cross-Chain Transfer Protocol (CCTP) 跨链逻辑。
- * 专门用于 USDC 的安全、快速跨链转移。
+ * Encapsulates Circle Cross-Chain Transfer Protocol (CCTP) cross-chain logic.
+ * Specifically designed for secure, fast cross-chain transfer of USDC.
  *
- * 奖金要求：必须使用 CCTP 实现 USDC 的跨链转移。
+ * Bounty Requirement: Must implement USDC cross-chain transfer using CCTP.
  *
- * 使用官方 @circle-fin/bridge-kit 和 @circle-fin/adapter-viem-v2 进行真实集成。
+ * Uses official @circle-fin/bridge-kit and @circle-fin/adapter-viem-v2 for real integration.
  */
 
 import { BaseSkill, createAndRegisterSkill } from './base-skill'
@@ -22,66 +22,66 @@ import {
 import { parseUnits, formatUnits, http, createPublicClient } from 'viem'
 import { arbitrumSepolia, baseSepolia, sepolia } from 'viem/chains'
 
-// Circle Bridge Kit 导入
+// Circle Bridge Kit imports
 import { BridgeKit, type BridgeChainIdentifier } from '@circle-fin/bridge-kit'
 import { createViemAdapterFromPrivateKey } from '@circle-fin/adapter-viem-v2'
 
-// ==================== 技能配置 ====================
+// ==================== Skill Configuration ====================
 
 /**
- * Circle CCTP 技能配置
+ * Circle CCTP Skill Configuration
  */
 export interface CircleSkillConfig {
-  // Circle CCTP 合约地址（通常从 addresses.ts 读取）
+  // Circle CCTP contract addresses (usually read from addresses.ts)
   messageTransmitterAddress?: Address
   tokenMessengerAddress?: Address
   
-  // 跨链配置
-  supportedChains?: number[] // 支持的链列表
-  defaultGasLimit?: string   // 默认 gas 限制
+  // Cross-chain configuration
+  supportedChains?: number[] // List of supported chains
+  defaultGasLimit?: string   // Default gas limit
   
-  // 重试配置
+  // Retry configuration
   maxRetries?: number
   retryDelay?: number
   
-  // 调试配置
+  // Debug configuration
   debugMode?: boolean
 
-  // Bridge Kit 配置
-  privateKey?: `0x${string}` // 可选，用于测试的私钥（生产环境应从钱包获取）
+  // Bridge Kit configuration
+  privateKey?: `0x${string}` // Optional, private key for testing (production should get from wallet)
 }
 
-// 用于 Required 配置的内部类型，其中 privateKey 可以是 undefined
+// Internal type for Required configuration, where privateKey can be undefined
 type RequiredCircleSkillConfig = Omit<Required<CircleSkillConfig>, 'privateKey'> & {
   privateKey?: `0x${string}`
 }
 
-// ==================== 类型定义 ====================
+// ==================== Type Definitions ====================
 
 /**
- * CCTP 跨链参数
+ * CCTP Cross-Chain Parameters
  */
 export interface CCTPTransferParams {
-  fromChainId: number           // 源链 ID
-  toChainId: number             // 目标链 ID
-  amount: string                // USDC 金额（字符串格式）
-  recipient?: Address           // 接收地址（可选，默认当前地址）
-  deadline?: number             // 交易截止时间（时间戳）
+  fromChainId: number           // Source chain ID
+  toChainId: number             // Destination chain ID
+  amount: string                // USDC amount (string format)
+  recipient?: Address           // Recipient address (optional, defaults to current address)
+  deadline?: number             // Transaction deadline (timestamp)
 }
 
 /**
- * CCTP 跨链状态
+ * CCTP Cross-Chain Status
  */
 export enum CCTPTransferStatus {
-  PENDING = 'PENDING',          // 等待开始
-  INITIATED = 'INITIATED',      // 源链交易已发送
-  MESSAGE_SENT = 'MESSAGE_SENT', // 跨链消息已发送
-  COMPLETED = 'COMPLETED',      // 目标链交易已完成
-  FAILED = 'FAILED',            // 失败
+  PENDING = 'PENDING',          // Waiting to start
+  INITIATED = 'INITIATED',      // Source chain transaction sent
+  MESSAGE_SENT = 'MESSAGE_SENT', // Cross-chain message sent
+  COMPLETED = 'COMPLETED',      // Destination chain transaction completed
+  FAILED = 'FAILED',            // Failed
 }
 
 /**
- * CCTP 跨链结果
+ * CCTP Cross-Chain Result
  */
 export interface CCTPTransferResult {
   status: CCTPTransferStatus
@@ -90,29 +90,29 @@ export interface CCTPTransferResult {
   amount: string
   recipient: Address
   
-  // 交易信息
-  sourceTxHash?: string         // 源链交易哈希
-  messageHash?: string          // 跨链消息哈希
-  destinationTxHash?: string    // 目标链交易哈希
+  // Transaction information
+  sourceTxHash?: string         // Source chain transaction hash
+  messageHash?: string          // Cross-chain message hash
+  destinationTxHash?: string    // Destination chain transaction hash
   
-  // 时间信息
-  initiatedAt?: number          // 开始时间
-  messageSentAt?: number        // 消息发送时间
-  completedAt?: number          // 完成时间
+  // Time information
+  initiatedAt?: number          // Start time
+  messageSentAt?: number        // Message send time
+  completedAt?: number          // Completion time
   
-  // 错误信息
+  // Error information
   error?: string
   retryCount?: number
   
-  // 实现状态信息
-  note?: string                 // 实现说明
-  implementationRequired?: boolean // 是否需要真实实现
+  // Implementation status information
+  note?: string                 // Implementation note
+  implementationRequired?: boolean // Whether real implementation is needed
 }
 
-// ==================== 链 ID 映射 ====================
+// ==================== Chain ID Mapping ====================
 
 /**
- * 将项目链 ID 映射到 Bridge Kit 链标识符
+ * Map project chain IDs to Bridge Kit chain identifiers
  */
 function mapChainIdToBridgeChain(chainId: number): BridgeChainIdentifier {
   switch (chainId) {
@@ -143,56 +143,56 @@ function mapChainIdToBridgeChain(chainId: number): BridgeChainIdentifier {
   }
 }
 
-// ==================== 技能实现 ====================
+// ==================== Skill Implementation ====================
 
 /**
- * Circle CCTP 技能类
+ * Circle CCTP Skill Class
  */
 export class CircleSkill extends BaseSkill {
-  // 技能元数据
+  // Skill metadata
   readonly metadata: SkillMetadata = {
     id: 'circle',
     name: 'Circle CCTP Cross-Chain Transfer',
-    description: '使用 Circle CCTP 协议进行 USDC 的安全跨链转移',
+    description: 'Secure cross-chain transfer of USDC using Circle CCTP protocol',
     version: '1.0.0',
     author: 'Nomad Arc Team',
     
     capabilities: [
-      'cctp_transfer',          // CCTP 跨链转移
-      'cctp_status_check',      // 检查跨链状态
-      'cctp_estimate',          // 估算跨链成本
+      'cctp_transfer',          // CCTP cross-chain transfer
+      'cctp_status_check',      // Check cross-chain status
+      'cctp_estimate',          // Estimate cross-chain cost
     ],
     
     requiredParams: ['fromChainId', 'toChainId', 'amount'],
     optionalParams: ['recipient', 'deadline'],
     
     supportedChains: [
-      ChainId.ARBITRUM_SEPOLIA,  // Arbitrum Sepolia（奖金要求）
-      ChainId.BASE_SEPOLIA,      // Base Sepolia（奖金要求）
-      // 注意：CCTP 还支持其他链，但奖金要求这两个测试网
+      ChainId.ARBITRUM_SEPOLIA,  // Arbitrum Sepolia (bounty requirement)
+      ChainId.BASE_SEPOLIA,      // Base Sepolia (bounty requirement)
+      // Note: CCTP also supports other chains, but bounty requires these testnets
     ],
     
     isAsync: true,
   }
   
-  // 技能特定配置
+  // Skill-specific configuration
   private circleConfig: RequiredCircleSkillConfig
   
-  // Bridge Kit 实例
+  // Bridge Kit instance
   private bridgeKit: BridgeKit | null = null
   
-  // 跨链状态跟踪
+  // Cross-chain status tracking
   private transfers: Map<string, CCTPTransferResult> = new Map()
   
   /**
-   * 构造函数
+   * Constructor
    */
   constructor(config: CircleSkillConfig = {}) {
     super(config)
     
     this.circleConfig = {
-      messageTransmitterAddress: config.messageTransmitterAddress || '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275', // 默认测试网地址
-      tokenMessengerAddress: config.tokenMessengerAddress || '0xb43db544E2c27092c107639Ad201b3dEfAbcF192', // 默认测试网地址
+      messageTransmitterAddress: config.messageTransmitterAddress || '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275', // Default testnet address
+      tokenMessengerAddress: config.tokenMessengerAddress || '0xb43db544E2c27092c107639Ad201b3dEfAbcF192', // Default testnet address
       supportedChains: config.supportedChains || [ChainId.ARBITRUM_SEPOLIA, ChainId.BASE_SEPOLIA],
       defaultGasLimit: config.defaultGasLimit || '500000',
       maxRetries: config.maxRetries || 3,
@@ -202,22 +202,22 @@ export class CircleSkill extends BaseSkill {
     }
   }
   
-  // ==================== 抽象方法实现 ====================
+  // ==================== Abstract Method Implementation ====================
   
   /**
-   * 初始化 Circle CCTP 技能
+   * Initialize Circle CCTP Skill
    */
   protected async onInitialize(): Promise<void> {
     console.log('Initializing Circle CCTP skill with Bridge Kit...')
     
     try {
-      // 初始化 Bridge Kit
+      // Initialize Bridge Kit
       await this.initializeBridgeKit()
       
-      // 验证配置的合约地址
+      // Validate configured contract addresses
       this.validateContractAddresses()
       
-      // 清空状态跟踪
+      // Clear status tracking
       this.transfers.clear()
       
       console.log('✅ Circle CCTP skill initialized successfully')
@@ -234,17 +234,17 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 初始化 Bridge Kit
+   * Initialize Bridge Kit
    */
   private async initializeBridgeKit(): Promise<void> {
     try {
-      // 创建 Bridge Kit 实例
+      // Create Bridge Kit instance
       this.bridgeKit = new BridgeKit()
       
-      // 如果有私钥配置，创建适配器（仅用于测试）
+      // If private key is configured, create adapter (for testing only)
       if (this.circleConfig.privateKey) {
         console.log('🔑 Using private key from config for Bridge Kit adapter')
-        // 注意：实际生产环境应从钱包提供者获取适配器
+        // Note: Actual production environment should get adapter from wallet provider
       } else {
         console.log('⚠️  No private key provided, Bridge Kit will require adapter from context')
       }
@@ -257,7 +257,7 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 执行 Circle CCTP 操作
+   * Execute Circle CCTP Operation
    */
   protected async onExecute(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { action = 'transfer' } = params
@@ -278,15 +278,15 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 自定义参数验证
+   * Custom Parameter Validation
    */
   protected onValidate(params: Record<string, any>): { valid: boolean; errors: string[] } {
     const errors: string[] = []
     const { action = 'transfer' } = params
     
-    // 通用验证
+    // General validation
     if (action === 'transfer') {
-      // 验证链 ID
+      // Validate chain IDs
       if (!params.fromChainId) {
         errors.push('Missing required parameter: fromChainId')
       } else if (!this.circleConfig.supportedChains.includes(Number(params.fromChainId))) {
@@ -303,20 +303,20 @@ export class CircleSkill extends BaseSkill {
         errors.push('Source and destination chains must be different')
       }
       
-      // 验证金额
+      // Validate amount
       if (!params.amount) {
         errors.push('Missing required parameter: amount')
       } else if (!this.isValidAmount(params.amount)) {
         errors.push(`Invalid amount format: ${params.amount}. Must be a positive number`)
       }
       
-      // 验证接收地址（如果提供）
+      // Validate recipient address (if provided)
       if (params.recipient && !this.isValidAddress(params.recipient)) {
         errors.push(`Invalid recipient address: ${params.recipient}`)
       }
     }
     
-    // 状态检查验证
+    // Status check validation
     if (action === 'check_status') {
       if (!params.transferId) {
         errors.push('Missing required parameter for status check: transferId')
@@ -330,7 +330,7 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 估算执行成本
+   * Estimate Execution Cost
    */
   protected async onEstimate(params: Record<string, any>, context: AgentContext): Promise<{
     gasEstimate: string
@@ -339,7 +339,7 @@ export class CircleSkill extends BaseSkill {
   }> {
     const { fromChainId, toChainId, amount } = params
     
-    // 使用 Bridge Kit 进行估算
+    // Use Bridge Kit for estimation
     try {
       const estimate = await this.estimateTransfer(params, context)
       return {
@@ -348,7 +348,7 @@ export class CircleSkill extends BaseSkill {
         costEstimate: estimate.totalFee || 'Varies by network conditions',
       }
     } catch (error) {
-      // 回退到保守估算
+      // Fallback to conservative estimation
       console.warn('Failed to get estimate from Bridge Kit, using conservative values:', error)
       return {
         gasEstimate: '1000000',
@@ -358,10 +358,10 @@ export class CircleSkill extends BaseSkill {
     }
   }
   
-  // ==================== 具体操作方法 ====================
+  // ==================== Concrete Operation Methods ====================
   
   /**
-   * 执行 CCTP 跨链转移
+   * Execute CCTP Cross-Chain Transfer
    */
   private async executeCCTPTransfer(params: Record<string, any>, context: AgentContext): Promise<CCTPTransferResult> {
     const {
@@ -369,13 +369,13 @@ export class CircleSkill extends BaseSkill {
       toChainId,
       amount,
       recipient = context.userAddress,
-      deadline = Date.now() + 30 * 60 * 1000, // 默认30分钟截止
+      deadline = Date.now() + 30 * 60 * 1000, // Default 30-minute deadline
     } = params
     
-    // 生成转移 ID
+    // Generate transfer ID
     const transferId = this.generateTransferId(fromChainId, toChainId, amount, recipient)
     
-    // 初始化转移状态
+    // Initialize transfer status
     const transfer: CCTPTransferResult = {
       status: CCTPTransferStatus.PENDING,
       fromChainId: Number(fromChainId),
@@ -385,7 +385,7 @@ export class CircleSkill extends BaseSkill {
       initiatedAt: Date.now(),
     }
     
-    // 保存状态
+    // Save status
     this.transfers.set(transferId, transfer)
     
     console.log(`🚀 Initiating CCTP transfer with Bridge Kit:`, {
@@ -397,22 +397,22 @@ export class CircleSkill extends BaseSkill {
     })
     
     try {
-      // 验证 Bridge Kit
+      // Validate Bridge Kit
       if (!this.bridgeKit) {
         throw new Error('Bridge Kit not initialized')
       }
       
-      // 获取适配器（这里简化，实际应从上下文获取钱包适配器）
+      // Get adapter (simplified, actual should get wallet adapter from context)
       const adapter = await this.getAdapter(context, Number(fromChainId))
       if (!adapter) {
         throw new Error('Unable to get wallet adapter for source chain')
       }
       
-      // 映射链标识符
+      // Map chain identifiers
       const fromChain = mapChainIdToBridgeChain(Number(fromChainId))
       const toChain = mapChainIdToBridgeChain(Number(toChainId))
       
-      // 构建 Bridge Kit 参数
+      // Build Bridge Kit parameters
       const bridgeParams = {
         from: { adapter, chain: fromChain },
         to: { adapter, chain: toChain, recipientAddress: recipient },
@@ -422,25 +422,25 @@ export class CircleSkill extends BaseSkill {
       
       console.log('📋 Bridge Kit parameters:', bridgeParams)
       
-      // 执行跨链转移
+      // Execute cross-chain transfer
       const result = await this.bridgeKit.bridge(bridgeParams)
       
       console.log('📋 Bridge Kit result:', result)
       
-      // 提取交易哈希（根据 Bridge Kit 结果结构）
+      // Extract transaction hashes (based on Bridge Kit result structure)
       let sourceTxHash: string | undefined
       let messageHash: string | undefined
       let destinationTxHash: string | undefined
       
       if (result.state === 'success') {
-        // 从步骤中提取交易哈希
+        // Extract transaction hashes from steps
         for (const step of result.steps) {
-          // 根据步骤名称判断类型
+          // Determine type based on step name
           if (step.name.toLowerCase().includes('burn') && step.state === 'success' && step.txHash) {
             sourceTxHash = step.txHash
           }
           if (step.name.toLowerCase().includes('message') && step.state === 'success') {
-            // 消息步骤可能没有交易哈希，但可能有其他标识符
+            // Message step may not have transaction hash, but may have other identifier
             messageHash = step.data as string || step.txHash
           }
           if (step.name.toLowerCase().includes('mint') && step.state === 'success' && step.txHash) {
@@ -449,18 +449,18 @@ export class CircleSkill extends BaseSkill {
         }
       }
       
-      // 更新转移状态
+      // Update transfer status
       const updatedTransfer: CCTPTransferResult = {
         ...transfer,
         status: result.state === 'success' ? CCTPTransferStatus.INITIATED : CCTPTransferStatus.PENDING,
         sourceTxHash,
         messageHash,
         destinationTxHash,
-        note: result.state === 'success' ? 'CCTP 跨链已启动，等待跨链消息确认' : '跨链进行中',
+        note: result.state === 'success' ? 'CCTP cross-chain initiated, waiting for cross-chain message confirmation' : 'Cross-chain in progress',
         implementationRequired: false,
       }
       
-      // 更新状态
+      // Update status
       this.transfers.set(transferId, updatedTransfer)
       
       console.log(`✅ CCTP transfer initiated successfully:`, {
@@ -469,7 +469,7 @@ export class CircleSkill extends BaseSkill {
         messageHash: updatedTransfer.messageHash,
       })
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_transfer', params, context, updatedTransfer)
       
       return updatedTransfer
@@ -477,19 +477,19 @@ export class CircleSkill extends BaseSkill {
     } catch (error) {
       console.error('❌ CCTP transfer failed:', error)
       
-      // 更新为失败状态
+      // Update to failed status
       const result: CCTPTransferResult = {
         ...transfer,
         status: CCTPTransferStatus.FAILED,
         error: error instanceof Error ? error.message : String(error),
-        note: 'CCTP 跨链执行失败',
+        note: 'CCTP cross-chain execution failed',
         implementationRequired: false,
       }
       
-      // 更新状态
+      // Update status
       this.transfers.set(transferId, result)
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_transfer', params, context, result)
       
       return result
@@ -497,54 +497,54 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 检查转移状态
+   * Check Transfer Status
    */
   private async checkTransferStatus(params: Record<string, any>, context: AgentContext): Promise<CCTPTransferResult> {
     const { transferId } = params
     
-    // 查找转移记录
+    // Find transfer record
     const transfer = this.transfers.get(transferId)
     if (!transfer) {
       throw new Error(`Transfer not found: ${transferId}`)
     }
     
     try {
-      // 如果有消息哈希，使用 Bridge Kit 检查链上状态
+      // If there's a message hash, use Bridge Kit to check on-chain status
       if (transfer.messageHash && this.bridgeKit) {
         console.log(`🔍 Checking CCTP transfer status for message hash: ${transfer.messageHash}`)
         
-        // 注意：Bridge Kit 目前没有直接的 checkTransferStatus 方法
-        // 我们可以通过查询链上状态来实现，这里简化处理
-        // 实际实现应调用 Bridge Kit 的相应方法或直接查询链上数据
+        // Note: Bridge Kit currently doesn't have direct checkTransferStatus method
+        // We can implement by querying on-chain status, simplified here
+        // Actual implementation should call Bridge Kit's corresponding method or directly query on-chain data
         
-        // 暂时返回当前状态，标记为需要实现
+        // Temporarily return current status, marked as requiring implementation
         const updatedTransfer: CCTPTransferResult = {
           ...transfer,
-          note: '状态检查功能需要进一步实现 Bridge Kit 集成',
+          note: 'Status check functionality requires further Bridge Kit integration',
           implementationRequired: true,
         }
         
-        // 保存更新后的状态
+        // Save updated status
         this.transfers.set(transferId, updatedTransfer)
         
         console.log(`ℹ️  CCTP transfer status check not fully implemented`)
         
-        // 记录执行日志
+        // Log execution
         this.logExecution('cctp_status_check', params, context, updatedTransfer)
         
         return updatedTransfer
       }
       
-      // 如果没有消息哈希或 SDK 不可用，返回当前状态
+      // If no message hash or SDK unavailable, return current status
       console.log(`ℹ️  No message hash or Bridge Kit unavailable for transfer: ${transferId}`)
       
       const result: CCTPTransferResult = {
         ...transfer,
-        note: transfer.messageHash ? '等待跨链消息确认' : '转移尚未启动',
+        note: transfer.messageHash ? 'Waiting for cross-chain message confirmation' : 'Transfer not yet initiated',
         implementationRequired: !transfer.messageHash,
       }
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_status_check', params, context, result)
       
       return result
@@ -555,11 +555,11 @@ export class CircleSkill extends BaseSkill {
       const result: CCTPTransferResult = {
         ...transfer,
         error: error instanceof Error ? error.message : String(error),
-        note: '状态检查失败',
+        note: 'Status check failed',
         implementationRequired: false,
       }
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_status_check', params, context, result)
       
       return result
@@ -567,28 +567,28 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 估算转移成本
+   * Estimate Transfer Cost
    */
   private async estimateTransfer(params: Record<string, any>, context: AgentContext): Promise<any> {
     const { fromChainId, toChainId, amount } = params
     
     try {
-      // 验证 Bridge Kit
+      // Validate Bridge Kit
       if (!this.bridgeKit) {
         throw new Error('Bridge Kit not initialized')
       }
       
-      // 获取适配器（简化）
+      // Get adapter (simplified)
       const adapter = await this.getAdapter(context, Number(fromChainId))
       if (!adapter) {
         throw new Error('Unable to get wallet adapter for estimation')
       }
       
-      // 映射链标识符
+      // Map chain identifiers
       const fromChain = mapChainIdToBridgeChain(Number(fromChainId))
       const toChain = mapChainIdToBridgeChain(Number(toChainId))
       
-      // 使用 Bridge Kit 进行估算
+      // Use Bridge Kit for estimation
       const estimate = await this.bridgeKit.estimate({
         from: { adapter, chain: fromChain },
         to: { adapter, chain: toChain },
@@ -598,10 +598,10 @@ export class CircleSkill extends BaseSkill {
       
       console.log('📊 Bridge Kit estimate:', estimate)
       
-      // 从 gasFees 中提取 gas 估算
-      let totalGasEstimate = '1500000' // 默认值
+      // Extract gas estimate from gasFees
+      let totalGasEstimate = '1500000' // Default value
       if (estimate.gasFees && estimate.gasFees.length > 0) {
-        // 计算总 gas 估算（简化处理）
+        // Calculate total gas estimate (simplified)
         const totalGas = estimate.gasFees.reduce((sum, fee) => {
           if (fee.fees && fee.fees.fee) {
             return sum + parseFloat(fee.fees.fee)
@@ -611,20 +611,20 @@ export class CircleSkill extends BaseSkill {
         totalGasEstimate = totalGas > 0 ? totalGas.toString() : '1500000'
       }
       
-      // 从 fees 中提取协议费用
+      // Extract protocol fees from fees
       let sourceFee = '0.01'
       let destinationFee = '0.02'
       let totalProtocolFee = '0.03'
       
       if (estimate.fees && estimate.fees.length > 0) {
-        // 计算总协议费用
+        // Calculate total protocol fees
         const protocolFees = estimate.fees.filter(fee => fee.type === 'provider' && fee.amount)
         const totalFee = protocolFees.reduce((sum, fee) => {
           return sum + parseFloat(fee.amount || '0')
         }, 0)
         totalProtocolFee = totalFee > 0 ? totalFee.toFixed(4) : '0.03'
         
-        // 简化：假设第一个费用是源链，第二个是目标链
+        // Simplified: assume first fee is source chain, second is destination chain
         if (protocolFees.length >= 2) {
           sourceFee = protocolFees[0].amount || '0.01'
           destinationFee = protocolFees[1].amount || '0.02'
@@ -639,12 +639,12 @@ export class CircleSkill extends BaseSkill {
         toChainId,
         amount,
         estimatedGas: totalGasEstimate,
-        estimatedTime: 60000, // 默认1分钟，实际应从 estimate 中获取
+        estimatedTime: 60000, // Default 1 minute, actual should be obtained from estimate
         estimatedCost: totalProtocolFee,
         sourceChainFee: sourceFee,
         destinationChainFee: destinationFee,
         totalFee: (parseFloat(sourceFee) + parseFloat(destinationFee)).toFixed(4),
-        note: '基于 Bridge Kit 的估算',
+        note: 'Estimation based on Bridge Kit',
         implementationRequired: false,
       }
       
@@ -657,7 +657,7 @@ export class CircleSkill extends BaseSkill {
         totalFee: result.totalFee,
       })
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_estimate', params, context, result)
       
       return result
@@ -665,48 +665,48 @@ export class CircleSkill extends BaseSkill {
     } catch (error) {
       console.error('❌ Failed to estimate CCTP transfer:', error)
       
-      // 返回保守估算
+      // Return conservative estimate
       const result = {
         fromChainId,
         toChainId,
         amount,
-        estimatedGas: '1500000', // 保守估计
-        estimatedTime: 90000,    // 1.5分钟
-        estimatedCost: '0.03',   // 保守成本
-        note: '估算失败，使用保守值。错误: ' + (error instanceof Error ? error.message : String(error)),
+        estimatedGas: '1500000', // Conservative estimate
+        estimatedTime: 90000,    // 1.5 minutes
+        estimatedCost: '0.03',   // Conservative cost
+        note: 'Estimation failed, using conservative values. Error: ' + (error instanceof Error ? error.message : String(error)),
         implementationRequired: true,
       }
       
-      // 记录执行日志
+      // Log execution
       this.logExecution('cctp_estimate', params, context, result)
       
       return result
     }
   }
   
-  // ==================== 工具方法 ====================
+  // ==================== Utility Methods ====================
   
   /**
-   * 获取适配器（简化实现）
-   * 实际应从 AgentContext 中获取钱包提供者
+   * Get Adapter (Simplified Implementation)
+   * Actual should get wallet provider from AgentContext
    */
   private async getAdapter(context: AgentContext, chainId: number): Promise<any> {
-    // 如果有配置的私钥，使用它创建适配器（仅用于测试）
+    // If there's a configured private key, use it to create adapter (for testing only)
     if (this.circleConfig.privateKey) {
       try {
-        // 验证链是否支持
+        // Validate chain support
         const supportedChainIds = [arbitrumSepolia.id, baseSepolia.id, sepolia.id] as number[]
         if (!supportedChainIds.includes(chainId)) {
           throw new Error(`Unsupported chain ID for adapter: ${chainId}`)
         }
 
-        // 创建适配器 - 使用正确的API
+        // Create adapter - using correct API
         const adapter = createViemAdapterFromPrivateKey({
           privateKey: this.circleConfig.privateKey,
           getPublicClient: ({ chain }) => {
             let rpcUrl: string
             
-            // 根据链ID选择RPC URL
+            // Select RPC URL based on chain ID
             if (chain.id === arbitrumSepolia.id) {
               rpcUrl = process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC || arbitrumSepolia.rpcUrls.default.http[0]
             } else if (chain.id === baseSepolia.id) {
@@ -714,7 +714,7 @@ export class CircleSkill extends BaseSkill {
             } else if (chain.id === sepolia.id) {
               rpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC || sepolia.rpcUrls.default.http[0]
             } else {
-              // 默认使用链的默认RPC
+              // Default to chain's default RPC
               rpcUrl = chain.rpcUrls.default.http[0]
             }
             
@@ -730,20 +730,20 @@ export class CircleSkill extends BaseSkill {
         return adapter
       } catch (error) {
         console.error('Failed to create adapter from private key:', error)
-        // 继续尝试其他方法
+        // Continue trying other methods
       }
     }
     
-    // 尝试从上下文中获取钱包适配器
-    // 这里需要根据实际项目结构实现
+    // Try to get wallet adapter from context
+    // This needs to be implemented based on actual project structure
     console.warn('No private key provided and wallet adapter not implemented, using fallback')
     
-    // 返回 null 表示需要外部适配器
+    // Return null indicating external adapter is needed
     return null
   }
   
   /**
-   * 验证合约地址
+   * Validate Contract Addresses
    */
   private validateContractAddresses(): void {
     const { messageTransmitterAddress, tokenMessengerAddress } = this.circleConfig
@@ -760,25 +760,25 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 验证地址格式
+   * Validate Address Format
    */
   private isValidAddress(address: string): boolean {
     return /^0x[a-fA-F0-9]{40}$/.test(address)
   }
   
   /**
-   * 验证金额格式
+   * Validate Amount Format
    */
   private isValidAmount(amount: string): boolean {
     if (!amount || typeof amount !== 'string') return false
     
-    // 检查是否为有效数字
+    // Check if valid number
     const num = parseFloat(amount)
     return !isNaN(num) && num > 0
   }
   
   /**
-   * 生成转移 ID
+   * Generate Transfer ID
    */
   private generateTransferId(
     fromChainId: number,
@@ -792,14 +792,14 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 获取 USDC 地址
+   * Get USDC Address
    */
   private getUSDCAddress(chainId: number): Address {
     try {
-      // 尝试从 addresses.ts 获取
+      // Try to get from addresses.ts
       return getUSDCAddress(chainId)
     } catch (error) {
-      // 返回默认测试网地址
+      // Return default testnet addresses
       if (chainId === ChainId.ARBITRUM_SEPOLIA) {
         return '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d' as Address
       } else if (chainId === ChainId.BASE_SEPOLIA) {
@@ -810,7 +810,7 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 将 SDK 状态映射到 CCTP 状态
+   * Map SDK Status to CCTP Status
    */
   private mapSDKStatusToCCTPStatus(sdkStatus: string): CCTPTransferStatus {
     const statusMap: Record<string, CCTPTransferStatus> = {
@@ -827,28 +827,28 @@ export class CircleSkill extends BaseSkill {
   }
   
   /**
-   * 重置技能
+   * Reset Skill
    */
   protected onReset(): void {
     this.transfers.clear()
   }
 }
 
-// ==================== 导出和注册 ====================
+// ==================== Export and Registration ====================
 
 /**
- * 创建并注册 Circle CCTP 技能实例
+ * Create and Register Circle CCTP Skill Instance
  */
 export function initializeCircleSkill(config: CircleSkillConfig = {}): CircleSkill {
   return createAndRegisterSkill(CircleSkill, config)
 }
 
 /**
- * 获取 Circle CCTP 技能实例
+ * Get Circle CCTP Skill Instance
  */
 export async function getCircleSkill(): Promise<CircleSkill | undefined> {
   try {
-    // 使用 ES 模块动态导入避免循环依赖
+    // Use ES module dynamic import to avoid circular dependency
     const { getSkillRegistry } = await import('./base-skill')
     const registry = getSkillRegistry()
     return registry.get('circle') as CircleSkill | undefined

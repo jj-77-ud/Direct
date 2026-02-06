@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   webpack: (config, { isServer }) => {
-    // 为Web3库添加必要的polyfill
+    // Add necessary polyfills for Web3 libraries
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -16,7 +16,7 @@ const nextConfig = {
       path: require.resolve('path-browserify'),
     };
 
-    // 添加对.wasm文件的支持
+    // Add support for .wasm files
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
@@ -24,7 +24,7 @@ const nextConfig = {
 
     return config;
   },
-  // 允许外部图像域名
+  // Allow external image domains
   images: {
     remotePatterns: [
       {
@@ -33,7 +33,7 @@ const nextConfig = {
       },
     ],
   },
-  // 启用ES模块
+  // Enable ES modules
   experimental: {
     esmExternals: 'loose',
   },

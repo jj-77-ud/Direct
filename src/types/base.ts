@@ -1,24 +1,24 @@
 /**
- * Nomad Arc 基础类型定义
+ * Nomad Arc Base Type Definitions
  * 
- * 此文件定义了不依赖外部包的基础类型，用于避免循环依赖。
- * 当外部包（如 viem）未安装时，这些类型仍然可用。
+ * This file defines base types that do not depend on external packages, used to avoid circular dependencies.
+ * These types remain available even when external packages (like viem) are not installed.
  */
 
-// ==================== 基础类型 ====================
+// ==================== Basic Types ====================
 
 /**
- * 以太坊地址类型 (0x 开头，40个十六进制字符)
+ * Ethereum Address Type (0x-prefixed, 40 hexadecimal characters)
  */
 export type Address = `0x${string}`
 
 /**
- * 交易哈希类型 (0x 开头，64个十六进制字符)
+ * Transaction Hash Type (0x-prefixed, 64 hexadecimal characters)
  */
 export type Hash = `0x${string}`
 
 /**
- * 代币标准
+ * Token Standard
  */
 export enum TokenStandard {
   ERC20 = 'ERC20',
@@ -28,7 +28,7 @@ export enum TokenStandard {
 }
 
 /**
- * 代币信息
+ * Token Information
  */
 export interface TokenInfo {
   address: Address
@@ -41,7 +41,7 @@ export interface TokenInfo {
 }
 
 /**
- * 区块链网络配置
+ * Blockchain Network Configuration
  */
 export interface BlockchainNetwork {
   id: number
@@ -64,17 +64,17 @@ export interface BlockchainNetwork {
   testnet?: boolean
 }
 
-// ==================== 工具函数 ====================
+// ==================== Utility Functions ====================
 
 /**
- * 验证地址格式
+ * Validate Address Format
  */
 export function isValidAddress(address: string): address is Address {
   return /^0x[a-fA-F0-9]{40}$/.test(address)
 }
 
 /**
- * 缩短地址显示
+ * Shorten Address Display
  */
 export function shortenAddress(address: Address, chars = 4): string {
   if (!address) return ''
@@ -82,14 +82,14 @@ export function shortenAddress(address: Address, chars = 4): string {
 }
 
 /**
- * 检查两个地址是否相等（不区分大小写）
+ * Check if Two Addresses are Equal (case-insensitive)
  */
 export function areAddressesEqual(a: Address, b: Address): boolean {
   return a.toLowerCase() === b.toLowerCase()
 }
 
 /**
- * 创建代币信息
+ * Create Token Information
  */
 export function createTokenInfo(
   address: Address,
@@ -110,7 +110,7 @@ export function createTokenInfo(
 }
 
 /**
- * 类型守卫：检查是否为有效地址
+ * Type Guard: Check if Valid Address
  */
 export function assertValidAddress(address: string): asserts address is Address {
   if (!isValidAddress(address)) {
@@ -119,7 +119,7 @@ export function assertValidAddress(address: string): asserts address is Address 
 }
 
 /**
- * 安全转换字符串为地址类型
+ * Safely Convert String to Address Type
  */
 export function toAddress(address: string): Address {
   assertValidAddress(address)
@@ -127,11 +127,11 @@ export function toAddress(address: string): Address {
 }
 
 /**
- * 空地址常量
+ * Zero Address Constant
  */
 export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 
 /**
- * 空哈希常量
+ * Zero Hash Constant
  */
 export const ZERO_HASH: Hash = '0x0000000000000000000000000000000000000000000000000000000000000000'

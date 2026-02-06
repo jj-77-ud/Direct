@@ -1,90 +1,90 @@
-# Direct 技能配置系统
+# Direct Skill Configuration System
 
-## 概述
+## Overview
 
-本文档是 Nomad Arc 项目的技能配置中心，采用技能专属配置文档架构。每个技能都有独立的配置文档，确保配置的清晰性、可维护性和安全性。
+This document is the skill configuration hub for the Nomad Arc project, adopting a skill-specific configuration documentation architecture. Each skill has independent configuration documentation, ensuring clarity, maintainability, and security of configurations.
 
-## 配置文档索引
+## Configuration Document Index
 
-| 技能 | 配置文档 | 描述 | 最后更新 |
+| Skill | Configuration Document | Description | Last Updated |
 |------|----------|------|----------|
-| **LI.FI** | [lifi-config.md](./lifi-config.md) | LI.FI 跨链桥接技能配置 | 2026-02-04 |
-| **Circle CCTP** | [circle-config.md](./circle-config.md) | Circle CCTP USDC 跨链技能配置 | 2026-02-04 |
-| **Uniswap v4** | [uniswap-config.md](./uniswap-config.md) | Uniswap v4 交易和流动性技能配置 | 2026-02-04 |
-| **ENS** | [ens-config.md](./ens-config.md) | ENS 域名解析技能配置 | 2026-02-04 |
-| **AI 系统** | [ai-config.md](./ai-config.md) | AI 意图解析系统配置 | 2026-02-04 |
+| **LI.FI** | [lifi-config.md](./lifi-config.md) | LI.FI cross-chain bridging skill configuration | 2026-02-04 |
+| **Circle CCTP** | [circle-config.md](./circle-config.md) | Circle CCTP USDC cross-chain skill configuration | 2026-02-04 |
+| **Uniswap v4** | [uniswap-config.md](./uniswap-config.md) | Uniswap v4 trading and liquidity skill configuration | 2026-02-04 |
+| **ENS** | [ens-config.md](./ens-config.md) | ENS domain resolution skill configuration | 2026-02-04 |
+| **AI System** | [ai-config.md](./ai-config.md) | AI intent parsing system configuration | 2026-02-04 |
 
-## 配置层级架构
+## Configuration Hierarchy Architecture
 
 ```
-环境变量 (.env.local)        # 最高优先级，包含敏感信息
+Environment Variables (.env.local)        # Highest priority, contains sensitive information
   ↓
-项目配置 (config/project-config.ts) # 运行时配置
+Project Configuration (config/project-config.ts) # Runtime configuration
   ↓
-技能默认配置 (技能内部)      # 默认值和回退配置
+Skill Default Configuration (inside skill)      # Default values and fallback configuration
   ↓
-配置文档 (docs/skill-configs/) # 文档和最佳实践
+Configuration Documentation (docs/skill-configs/) # Documentation and best practices
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 环境配置
+### 1. Environment Configuration
 ```bash
-# 复制环境变量模板
+# Copy environment variable template
 cp .env.example .env.local
 
-# 编辑 .env.local 文件，填入你的配置
+# Edit .env.local file, fill in your configuration
 ```
 
-### 2. 配置验证
+### 2. Configuration Validation
 ```bash
-# 运行配置验证脚本
+# Run configuration validation script
 npm run validate-config
 ```
 
-### 3. 技能配置
-1. 查看对应技能的配置文档
-2. 按照文档说明配置环境变量
-3. 运行技能测试脚本验证配置
+### 3. Skill Configuration
+1. Check the corresponding skill's configuration document
+2. Configure environment variables according to the documentation
+3. Run skill test scripts to verify configuration
 
-## 配置最佳实践
+## Configuration Best Practices
 
-### 安全第一
-- **敏感信息**（API密钥、私钥）必须通过环境变量管理
-- 使用 `.env.example` 作为模板，`.env.local` 存储实际值
-- 配置文件不应包含真实密钥，只包含占位符
+### Security First
+- **Sensitive information** (API keys, private keys) must be managed through environment variables
+- Use `.env.example` as template, `.env.local` to store actual values
+- Configuration files should not contain real keys, only placeholders
 
-### 单一事实来源
-- 每个配置项只在一个地方定义
-- 避免在文档和代码中重复相同的配置
-- 使用代码作为主要配置源，文档作为说明
+### Single Source of Truth
+- Each configuration item is defined in only one place
+- Avoid duplicating the same configuration in documentation and code
+- Use code as the primary configuration source, documentation as explanation
 
-### 版本控制
-- 配置变更应该有清晰的版本历史
-- 重大配置变更需要更新 `CHANGELOG.md`
-- 配置模板应该与代码版本同步
+### Version Control
+- Configuration changes should have clear version history
+- Major configuration changes require updating `CHANGELOG.md`
+- Configuration templates should be synchronized with code versions
 
-## 环境变量命名规范
+## Environment Variable Naming Convention
 
-为了确保环境变量命名的一致性和可维护性，所有技能配置必须遵循以下命名规范：
+To ensure consistency and maintainability of environment variable naming, all skill configurations must follow the following naming convention:
 
-### 通用规则
-- 前缀格式：`[技能名称]_[功能]_[具体项]`
-- 技能名称：AI, CIRCLE, ENS, LIFI, UNISWAP（大写）
-- 功能分类：API, RPC, PRIVATE_KEY, DEBUG, CACHE, CONFIG
-- 具体项：描述具体内容
+### General Rules
+- Prefix format: `[SKILL_NAME]_[FUNCTION]_[SPECIFIC_ITEM]`
+- Skill names: AI, CIRCLE, ENS, LIFI, UNISWAP (uppercase)
+- Function categories: API, RPC, PRIVATE_KEY, DEBUG, CACHE, CONFIG
+- Specific items: Describe specific content
 
-### 具体规范
-1. **API配置**：`[技能]_API_KEY`, `[技能]_API_URL`, `[技能]_INTEGRATOR`
-2. **RPC配置**：`[链]_RPC_URL`（如 `ARBITRUM_SEPOLIA_RPC_URL`）
-3. **私钥**：`[技能]_PRIVATE_KEY`
-4. **调试**：`DEBUG_[技能]`
-5. **缓存**：`[技能]_CACHE_TTL`, `[技能]_CACHE_ENABLED`
-6. **其他**：`[技能]_MAX_RETRIES`, `[技能]_TIMEOUT`, `[技能]_SLIPPAGE`
+### Specific Specifications
+1. **API Configuration**: `[SKILL]_API_KEY`, `[SKILL]_API_URL`, `[SKILL]_INTEGRATOR`
+2. **RPC Configuration**: `[CHAIN]_RPC_URL` (e.g., `ARBITRUM_SEPOLIA_RPC_URL`)
+3. **Private Keys**: `[SKILL]_PRIVATE_KEY`
+4. **Debugging**: `DEBUG_[SKILL]`
+5. **Caching**: `[SKILL]_CACHE_TTL`, `[SKILL]_CACHE_ENABLED`
+6. **Others**: `[SKILL]_MAX_RETRIES`, `[SKILL]_TIMEOUT`, `[SKILL]_SLIPPAGE`
 
-### 示例
+### Examples
 ```bash
-# AI 系统
+# AI System
 AI_TIMEOUT=30000
 DEBUG_AI=false
 AI_CACHE_TTL=300000
@@ -106,45 +106,45 @@ UNISWAP_PRIVATE_KEY=0x...
 ARBITRUM_SEPOLIA_RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
-1. **配置不生效**：检查环境变量是否正确加载
-2. **API 密钥错误**：验证密钥格式和权限
-3. **合约地址错误**：确认链 ID 和网络匹配
+### Common Issues
+1. **Configuration not taking effect**: Check if environment variables are loaded correctly
+2. **API key errors**: Verify key format and permissions
+3. **Contract address errors**: Confirm chain ID and network match
 
-### 调试工具
+### Debugging Tools
 ```bash
-# 查看当前配置状态
+# View current configuration status
 npm run debug-config
 
-# 验证特定技能配置
+# Validate specific skill configuration
 npm run validate-config -- --skill=lifi
 ```
 
-## 贡献指南
+## Contribution Guidelines
 
-### 添加新技能配置
-1. 在 `docs/skill-configs/` 目录下创建新的配置文档
-2. 遵循统一的文档模板
-3. 更新本 README 中的索引表
-4. 更新 `AI_MANIFEST.md` 中的文件注册表
+### Adding New Skill Configuration
+1. Create new configuration document in `docs/skill-configs/` directory
+2. Follow unified documentation template
+3. Update index table in this README
+4. Update file registry in `AI_MANIFEST.md`
 
-### 更新现有配置
-1. 修改对应的技能配置文档
-2. 如果需要，更新 `config/project-config.ts`
-3. 更新版本号和最后更新日期
-4. 在 `CHANGELOG.md` 中添加变更记录
+### Updating Existing Configuration
+1. Modify corresponding skill configuration document
+2. If needed, update `config/project-config.ts`
+3. Update version number and last updated date
+4. Add change record in `CHANGELOG.md`
 
-## 相关资源
+## Related Resources
 
-- [项目主配置](../config/project-config.ts) - 运行时配置
-- [环境变量模板](../.env.example) - 环境变量模板
-- [AI_MANIFEST.md](../AI_MANIFEST.md) - 项目文件索引
-- [配置验证脚本](../scripts/validate-config.ts) - 配置验证工具
+- [Project Main Configuration](../config/project-config.ts) - Runtime configuration
+- [Environment Variable Template](../.env.example) - Environment variable template
+- [AI_MANIFEST.md](../AI_MANIFEST.md) - Project file index
+- [Configuration Validation Script](../scripts/validate-config.ts) - Configuration validation tool
 
 ---
 
-**最后更新**: 2026-02-04  
-**维护者**: Nomad Arc 团队  
-**版本**: 1.0.0
+**Last Updated**: 2026-02-04  
+**Maintainer**: Nomad Arc Team  
+**Version**: 1.0.0
