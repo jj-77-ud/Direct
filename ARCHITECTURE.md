@@ -1,4 +1,4 @@
-# Direct项目全景索引 (AI_MANIFEST.md)
+# Direct 项目架构文档 (ARCHITECTURE.md)
 
 ## 1. 架构摘要 (System Overview)
 
@@ -14,10 +14,13 @@ Direct 是一个基于 AI 代理的跨链 DeFi 平台，采用技能架构模式
 | `package-lock.json` | 配置文件 | npm 依赖锁定文件，确保环境一致性 | npm |
 | `tsconfig.json` | 配置文件 | TypeScript 编译配置 | TypeScript |
 | `tsconfig.tsnode.json` | 配置文件 | TypeScript Node.js 运行时配置 | ts-node, typescript |
+| `tsconfig.tsbuildinfo` | 配置文件 | TypeScript 构建信息缓存文件 | TypeScript |
 | `next.config.js` | 配置文件 | Next.js 应用配置 | Next.js |
 | `tailwind.config.ts` | 配置文件 | Tailwind CSS 样式配置 | Tailwind CSS |
 | `postcss.config.js` | 配置文件 | PostCSS 处理配置，Tailwind CSS 必需 | postcss, autoprefixer |
 | `.env.example` | 配置文件 | 环境变量模板示例 | 所有需要环境变量的模块 |
+| `.env.local` | 配置文件 | 本地环境变量文件（不提交到版本控制） | 所有需要环境变量的模块 |
+| `.gitignore` | 配置文件 | Git 忽略文件规则定义 | Git |
 | `config/project-config.ts` | 配置文件 | 统一项目配置（链、SDK、合约地址） | 所有技能和区块链模块 |
 
 ### 技能架构核心文件
@@ -127,6 +130,8 @@ Direct 是一个基于 AI 代理的跨链 DeFi 平台，采用技能架构模式
 | `scripts/check-uniswap-abi.ts` | 验证脚本 | 验证Uniswap合约ABI配置 | `src/constants/abis.ts` |
 | `scripts/check-lifi-supported-chains.js` | 验证脚本 | 检查LI.FI支持的网络列表 | `@lifi/sdk` |
 | `scripts/diagnose-stateview.ts` | 诊断脚本 | Uniswap状态视图诊断工具 | `src/lib/uniswap/state-view.ts` |
+| `scripts/debug-route-structure.ts` | 诊断脚本 | LI.FI 路由结构调试工具，分析跨链路由配置 | `@lifi/sdk` |
+| `scripts/test-lifi-error-details.ts` | 诊断脚本 | LI.FI 错误详情分析工具，诊断跨链错误原因 | `@lifi/sdk`, `viem` |
 | `scripts/verify-fixes.ts` | 验证脚本 | 修复问题验证工具 | 无 |
 
 #### 真实链上测试
@@ -137,7 +142,11 @@ Direct 是一个基于 AI 代理的跨链 DeFi 平台，采用技能架构模式
 | `scripts/real-circle-test.ts` | 真实测试 | Circle CCTP真实环境测试 | `src/skills/circle-skill.ts` |
 | `scripts/test-lifi-buildbear.ts` | 真实测试 | LI.FI BuildBear沙箱测试，在分叉链上测试真实跨链功能 | `viem`, `@lifi/sdk`, `src/constants/addresses.ts` |
 | `scripts/test-lifi-real.ts` | 真实测试 | LI.FI 真实链上测试脚本，在BuildBear Arbitrum分叉上进行100%真实链上交互 | `viem`, `@lifi/sdk`, `src/constants/addresses.ts` |
+| `scripts/test-lifi-real-validation.ts` | 真实测试 | LI.FI 真实链上交互验证脚本，验证交易回执和配置正确性 | `viem`, `@lifi/sdk`, `src/constants/addresses.ts` |
 | `scripts/execute-real-transfer.ts` | 真实测试 | 真实的 Circle CCTP 跨链交易执行脚本 | `src/skills/circle-skill.ts` |
+| `scripts/test-usdc-approve.ts` | 真实测试 | USDC 授权功能测试脚本，验证代币授权逻辑 | `viem`, `src/constants/addresses.ts` |
+| `scripts/test-wallet-config.ts` | 真实测试 | 钱包配置测试脚本，验证私钥加载和钱包创建 | `viem` |
+| `scripts/test-signer-serialization.ts` | 真实测试 | 签名者序列化测试，验证跨环境签名者兼容性 | `viem` |
 
 #### 工具与辅助脚本
 | 文件路径 | 类型 | 功能一句话 | 关键依赖 |
@@ -147,6 +156,8 @@ Direct 是一个基于 AI 代理的跨链 DeFi 平台，采用技能架构模式
 | `scripts/explore-uniswap-sdk.ts` | 探索脚本 | Uniswap SDK功能探索 | `@uniswap/v4-sdk` |
 | `scripts/test-utils.ts` | 工具脚本 | 通用测试工具函数 | 无 |
 | `scripts/test-lifi-config.js` | 配置测试 | LI.FI配置验证测试 | `@lifi/sdk` |
+| `scripts/manual-lifi-execution.ts` | 工具脚本 | 手动LI.FI执行脚本，用于调试和手动测试 | `@lifi/sdk`, `viem` |
+| `scripts/test-lifi-complete-fix.ts` | 工具脚本 | LI.FI完整修复测试脚本，验证所有修复功能 | `@lifi/sdk`, `viem` |
 
 ### 文档与配置
 
