@@ -10,7 +10,8 @@
     "allowSyntheticDefaultImports": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "downlevelIteration": true
   },
   "include": [
     "scripts/**/*.ts",
