@@ -5,7 +5,7 @@
  * Responsible for converting natural language instructions into structured blockchain operation intents.
  */
 
-import { getDeepSeekClient, type NomadDeepSeekClient } from './deepseek-client'
+import { getDeepSeekClient, type NomadDeepSeekClient } from './client'
 import {
   type NomadIntent,
   IntentType,
@@ -242,7 +242,7 @@ export class IntentParser {
     tokenSymbol: string
     amount: string
   }): Promise<{
-    recommendedProtocol: 'LI.FI' | 'Circle CCTP' | '其他'
+    recommendedProtocol: 'LI.FI' | 'Circle CCTP' | 'Other'
     reasoning: string
     estimatedTime: string
     estimatedCost: string
