@@ -1,5 +1,5 @@
 /**
- * Nomad Arc Base Type Definitions
+ * Direct Base Type Definitions
  * 
  * This file defines base types that do not depend on external packages, used to avoid circular dependencies.
  * These types remain available even when external packages (like viem) are not installed.

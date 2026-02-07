@@ -1,5 +1,5 @@
 /**
- * Nomad Arc Blockchain Type Definitions
+ * Direct Blockchain Type Definitions
  *
  * This file defines types related to blockchain interactions, including transactions, contracts, events, etc.
  * Uses base types to avoid circular dependencies.
