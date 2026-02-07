@@ -1,5 +1,5 @@
 /**
- * Nomad Arc Intent Parser
+ * Direct Intent Parser
  * 
  * This file provides DeepSeek AI-based intent parsing service.
  * Responsible for converting natural language instructions into structured blockchain operation intents.

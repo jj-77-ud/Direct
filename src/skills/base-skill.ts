@@ -1,5 +1,5 @@
 /**
- * Nomad Arc Skill Abstract Base Class
+ * Direct Skill Abstract Base Class
  * 
  * This file defines the abstract base class that all skills must implement.
  * Follows the skill architecture pattern to ensure UI decoupling from specific protocol implementations.
