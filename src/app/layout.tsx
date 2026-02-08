@@ -8,7 +8,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Nomad Arc - AI‑Driven Cross‑Chain Intent Commander',
+  title: 'Direct - AI‑Driven Cross‑Chain Intent Commander',
   description: 'An AI‑agent‑based cross‑chain DeFi platform where users can execute complex multi‑chain asset operations via natural‑language instructions.',
 }
 

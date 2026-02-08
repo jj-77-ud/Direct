@@ -34,7 +34,7 @@ export function Header({ onMenuToggle, sidebarOpen = true }: HeaderProps) {
               </div>
               <div>
                 <h1 className="text-xl font-bold bg-gradient-to-r from-ai-blue via-ai-purple to-ai-magenta bg-clip-text text-transparent">
-                  Nomad Arc
+                  Direct
                 </h1>
                 <p className="text-xs text-gray-400">AI Cross-Chain DeFi</p>
               </div>

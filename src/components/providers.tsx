@@ -98,7 +98,7 @@ export function Providers({ children }: ProvidersProps) {
           modalSize="compact"
           showRecentTransactions={true}
           appInfo={{
-            appName: 'Nomad Arc',
+            appName: 'Direct',
             learnMoreUrl: 'https://docs.nomadarc.xyz',
           }}
         >

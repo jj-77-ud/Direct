@@ -19,7 +19,7 @@ const supportedChains = [arbitrumSepolia, baseSepolia, sepolia] as const;
 
 // 使用 getDefaultWallets 而不是 connectorsForWallets，避免复杂的依赖
 const { connectors } = getDefaultWallets({
-  appName: 'Nomad Arc',
+  appName: 'Direct',
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'demo-project-id',
 });
 
@@ -77,7 +77,7 @@ export function ProvidersSimple({ children }: ProvidersProps) {
           modalSize="compact"
           showRecentTransactions={true}
           appInfo={{
-            appName: 'Nomad Arc',
+            appName: 'Direct',
             learnMoreUrl: 'https://docs.nomadarc.xyz',
           }}
         >

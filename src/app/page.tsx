@@ -517,7 +517,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <div className="text-center text-gray-500 text-sm pt-6">
-        <p>© 2026 Nomad Arc. Built for hackathon.</p>
+        <p>© 2026 Direct. Built for hackathon.</p>
       </div>
     </div>
   );

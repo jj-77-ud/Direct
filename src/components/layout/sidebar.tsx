@@ -73,7 +73,7 @@ export function Sidebar() {
             <div className="p-1.5 rounded-lg bg-gradient-to-br from-ai-blue to-ai-purple">
               <Cpu className="w-5 h-5 text-white" />
             </div>
-            <span className="font-semibold text-white">Nomad Arc</span>
+            <span className="font-semibold text-white">Direct</span>
           </div>
         )}
         
