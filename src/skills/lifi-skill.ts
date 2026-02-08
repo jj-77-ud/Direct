@@ -12,7 +12,7 @@ import { type SkillMetadata, type AgentContext, type SkillExecutionResult } from
 import { type Address } from '../types/blockchain'
 import { ChainId } from '../constants/chains'
 import { getLiFiExecutorAddress, ContractName, getUSDCAddress } from '../constants/addresses'
-import { getRoutes, getStatus, executeRoute, type RoutesRequest, type Route, type StatusResponse, createConfig } from '@lifi/sdk'
+import { getQuote, getRoutes, getStatus, executeRoute, type RoutesRequest, type Route, type StatusResponse, createConfig } from '@lifi/sdk'
 import { parseUnits, formatUnits } from 'viem'
 import { waitForTransactionReceipt } from 'viem/actions'
 
@@ -233,6 +233,95 @@ export class LiFiSkill extends BaseSkill {
   // ==================== Utility Functions ====================
 
   /**
+   * Map chain ID for LI.FI API compatibility
+   * LI.FI API only supports specific chain IDs, so we need to map unsupported IDs
+   */
+  private mapChainIdForLiFi(chainId: number): number {
+    // LI.FI production API only supports mainnet chain IDs
+    // Testnet chain IDs must be mapped to their corresponding mainnet IDs
+    const LI_FI_SUPPORTED_MAINNET_IDS = new Set([
+      1,      // Ethereum Mainnet
+      42161,  // Arbitrum Mainnet
+      10,     // Optimism Mainnet
+      137,    // Polygon Mainnet
+      43114,  // Avalanche Mainnet
+      56,     // BSC Mainnet
+      8453,   // Base Mainnet
+    ]);
+
+    // If chain ID is already a supported mainnet ID, return as-is
+    if (LI_FI_SUPPORTED_MAINNET_IDS.has(chainId)) {
+      return chainId;
+    }
+
+    // Map testnet and unsupported chain IDs to mainnet IDs
+    const chainIdMapping: Record<number, number> = {
+      // Testnet to Mainnet mappings
+      421614: 42161,    // Arbitrum Sepolia -> Arbitrum Mainnet
+      84532: 8453,      // Base Sepolia -> Base Mainnet
+      11155111: 1,      // Sepolia -> Ethereum Mainnet
+      80001: 137,       // Mumbai -> Polygon Mainnet
+      5: 1,             // Goerli -> Ethereum Mainnet
+      97: 56,           // BSC Testnet -> BSC Mainnet
+      
+      // Sandbox and custom chain mappings
+      31337: 42161,     // BuildBear Arbitrum Sandbox -> Arbitrum Mainnet
+      5042002: 42161,   // Circle Arc Testnet -> Arbitrum Mainnet (since LI.FI doesn't support testnets)
+    };
+
+    const mappedId = chainIdMapping[chainId];
+    if (mappedId) {
+      console.log(`🔗 Chain ID mapping: ${chainId} -> ${mappedId} for LI.FI API compatibility`);
+      return mappedId;
+    }
+
+    // If no mapping found, check if it's already a mainnet ID (even if not in our list)
+    // Some mainnet IDs might not be in our list but could still work
+    if (chainId < 10000) { // Most mainnet IDs are under 10000
+      console.log(`⚠️ Chain ID ${chainId} is not in our known mainnet list, but trying as-is`);
+      return chainId;
+    }
+
+    // If no mapping found and looks like testnet, default to Arbitrum Mainnet
+    console.warn(`⚠️ Chain ID ${chainId} is not supported by LI.FI API, defaulting to Arbitrum Mainnet (42161)`);
+    return 42161;
+  }
+
+  /**
+   * Map chain ID for sandbox compatibility (reverse mapping)
+   * When we receive LI.FI routes with mainnet chain IDs, we need to map them back to sandbox IDs
+   * for transaction execution in the sandbox environment
+   */
+  private mapChainIdForSandbox(chainId: number): number {
+    // Reverse mapping: mainnet IDs -> sandbox IDs
+    const reverseChainIdMapping: Record<number, number> = {
+      42161: 31337,     // Arbitrum Mainnet -> BuildBear Arbitrum Sandbox
+      1: 31337,         // Ethereum Mainnet -> BuildBear Arbitrum Sandbox (fallback)
+      421614: 31337,    // Arbitrum Sepolia -> BuildBear Arbitrum Sandbox
+      10: 31337,        // Optimism Mainnet -> BuildBear Arbitrum Sandbox
+      137: 31337,       // Polygon Mainnet -> BuildBear Arbitrum Sandbox
+      43114: 31337,     // Avalanche Mainnet -> BuildBear Arbitrum Sandbox
+      56: 31337,        // BSC Mainnet -> BuildBear Arbitrum Sandbox
+      8453: 31337,      // Base Mainnet -> BuildBear Arbitrum Sandbox
+    };
+
+    const mappedId = reverseChainIdMapping[chainId];
+    if (mappedId) {
+      console.log(`🔗 Reverse chain ID mapping: ${chainId} -> ${mappedId} for sandbox compatibility`);
+      return mappedId;
+    }
+
+    // If no reverse mapping found, check if it's already a sandbox ID
+    if (chainId === 31337) {
+      return chainId; // Already sandbox ID
+    }
+
+    // Default: assume it's a sandbox-compatible ID
+    console.log(`ℹ️ Chain ID ${chainId} used as-is for sandbox (no reverse mapping needed)`);
+    return chainId;
+  }
+
+  /**
    * Manually create LI.FI SDK compatible Signer
    * Avoid DataCloneError caused by SDK automatically cloning walletClient
    * Create "minimal data" Signer without any complex object references
@@ -306,20 +395,26 @@ export class LiFiSkill extends BaseSkill {
             
           case 'sendTransaction':
             return async (transaction: any) => {
+              // 关键修复：使用 walletClient 当前的链 ID，而不是外部的 chainId 变量
+              const currentChainId = walletClient.chain?.id
               console.log('📤 Calling sendTransaction via closure:', {
                 to: transaction.to,
                 data: transaction.data?.substring(0, 100) + '...',
-                value: transaction.value,
-                chainId: chainId,
+                value: typeof transaction.value === 'bigint' ? transaction.value.toString() : transaction.value,
+                walletClientChainId: currentChainId,
+                logicalChainId: chainId,
               })
               
-              // Use walletClient to send transaction, ensuring physical chain ID matches
+              // 使用 walletClient 发送交易，确保物理链 ID 匹配
+              // 使用 chainId 参数而不是 chain 对象，避免 ChainMismatchError
+              console.log('🔗 代理签名器发送交易，使用 ChainID:', currentChainId)
+              
               return await walletClient.sendTransaction({
                 account: walletClient.account,
                 to: transaction.to,
                 data: transaction.data,
                 value: transaction.value ? BigInt(transaction.value) : 0n,
-                chain: walletClient.chain,
+                chainId: currentChainId, // 使用当前链 ID 而不是 chain 对象
               })
             }
             
@@ -376,7 +471,7 @@ export class LiFiSkill extends BaseSkill {
         allowTestnets: true,
         // Override RPC for Arbitrum mainnet fork
         rpcs: {
-          [42161]: [process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC || 'https://rpc.buildbear.io/delicate-cannonball-45d06d30'],
+          [42161]: [process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC || 'https://rpc.buildbear.io/compatible-ironman-b68d3c41'],
         },
         // Disable multichain RPC switching to ensure sandbox RPC is used
         multichain: false,
@@ -513,7 +608,130 @@ export class LiFiSkill extends BaseSkill {
   }
   
   // ==================== Concrete Operation Methods ====================
-  
+
+  /**
+   * Get routes using proxy API to avoid CORS issues in browser
+   */
+  private async getRoutesWithProxy(request: any): Promise<any> {
+    // Check if we're in browser environment
+    const isBrowser = typeof window !== 'undefined';
+    
+    if (isBrowser) {
+      // Use our proxy API in browser environment
+      console.log('📡 Using proxy API for LI.FI request (browser environment)', {
+        request: this.safeStringify(request, 2).substring(0, 500) + '...'
+      });
+      
+      try {
+        const proxyUrl = '/api/lifi/proxy?endpoint=advanced/routes';
+        console.log('📡 Proxy URL:', proxyUrl);
+        
+        const response = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: this.safeStringify(request),
+        });
+        
+        console.log('📡 Proxy response status:', response.status, response.statusText);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('📡 Proxy API error details:', errorText);
+          throw new Error(`Proxy API error: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
+        }
+        
+        const result = await response.json();
+        console.log('📡 Proxy API result success:', result.success);
+        
+        if (!result.success) {
+          throw new Error(`Proxy API returned error: ${result.error}`);
+        }
+        
+        return result.data;
+      } catch (proxyError: any) {
+        console.error('📡 Proxy API failed with error:', proxyError.message);
+        // In browser environment, don't fall back to direct SDK call (will fail due to CORS)
+        // Instead, re-throw the error with more context
+        throw new Error(`LI.FI proxy API failed: ${proxyError.message}. Please check if the proxy server is running.`);
+      }
+    } else {
+      // Server-side or non-browser environment, use direct SDK call
+      console.log('🖥️ Using direct LI.FI SDK call (server/non-browser environment)');
+      return await getRoutes(request);
+    }
+  }
+
+  /**
+   * Get quote using proxy API to avoid CORS issues in browser
+   */
+  private async getQuoteWithProxy(request: any): Promise<any> {
+    // Check if we're in browser environment
+    const isBrowser = typeof window !== 'undefined';
+    
+    if (isBrowser) {
+      // Use our proxy API in browser environment
+      console.log('📡 Using proxy API for LI.FI quote request (browser environment)', {
+        request: this.safeStringify(request, 2).substring(0, 500) + '...'
+      });
+      
+      try {
+        // Convert request object to query string for GET request
+        const queryParams = new URLSearchParams();
+        
+        // Add all request parameters to query string
+        Object.keys(request).forEach(key => {
+          const value = request[key];
+          if (value !== undefined && value !== null) {
+            // Convert to string, handling special cases
+            if (typeof value === 'object') {
+              queryParams.append(key, this.safeStringify(value));
+            } else {
+              queryParams.append(key, String(value));
+            }
+          }
+        });
+        
+        const proxyUrl = `/api/lifi/proxy?endpoint=quote&${queryParams.toString()}`;
+        console.log('📡 Proxy URL (GET with query params):', proxyUrl);
+        
+        const response = await fetch(proxyUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        
+        console.log('📡 Proxy response status:', response.status, response.statusText);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('📡 Proxy API error details:', errorText);
+          throw new Error(`Proxy API error: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
+        }
+        
+        const result = await response.json();
+        console.log('📡 Proxy API result success:', result.success);
+        
+        if (!result.success) {
+          throw new Error(`Proxy API returned error: ${result.error}`);
+        }
+        
+        return result.data;
+      } catch (proxyError: any) {
+        console.error('📡 Proxy API failed with error:', proxyError.message);
+        // In browser environment, don't fall back to direct SDK call (will fail due to CORS)
+        // Instead, re-throw the error with more context
+        throw new Error(`LI.FI proxy API failed: ${proxyError.message}. Please check if the proxy server is running.`);
+      }
+    } else {
+      // Server-side or non-browser environment, use direct SDK call
+      console.log('🖥️ Using direct LI.FI SDK getQuote call (server/non-browser environment)');
+      return await getQuote(request);
+    }
+  }
+
   /**
    * Get cross-chain quote (core functionality for bounty requirement)
    */
@@ -552,6 +770,40 @@ export class LiFiSkill extends BaseSkill {
       },
     }
     
+    // Mainnet token addresses (for mapping when testnet chain IDs are mapped to mainnet)
+    const MAINNET_TOKEN_ADDRESSES = {
+      // Arbitrum Mainnet
+      42161: {
+        USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as Address,
+        WETH: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1' as Address,
+      },
+      // Base Mainnet
+      8453: {
+        USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as Address,
+        WETH: '0x4200000000000000000000000000000000000006' as Address,
+      },
+      // Ethereum Mainnet
+      1: {
+        USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as Address,
+        WETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' as Address,
+      },
+    }
+    
+    // Token address mapping from testnet to mainnet (use lowercase keys for case-insensitive lookup)
+    const TOKEN_ADDRESS_MAPPING: Record<string, Address> = {
+      // Base Sepolia USDC -> Base Mainnet USDC
+      '0x036cbd53842c5426634e7929541ec2318f3dcf7e': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      '0x036CbD53842c5426634e7929541eC2318f3dCF7e': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      // Arbitrum Sepolia USDC -> Arbitrum Mainnet USDC
+      '0x75faf114eafb1bdbe2f0316df893fd58ce46aa1d': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+      '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA1d': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+      // Base Sepolia WETH -> Base Mainnet WETH
+      '0x4200000000000000000000000000000000000006': '0x4200000000000000000000000000000000000006', // Same address
+      // Arbitrum Sepolia WETH -> Arbitrum Mainnet WETH
+      '0x980b62da83eff3d4576c647993b0c1d7faf17c73': '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+      '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73': '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+    }
+    
     // If provided address is zero address or invalid, use fallback address
     let finalFromTokenAddress = fromTokenAddress as Address
     let finalToTokenAddress = toTokenAddress as Address
@@ -576,17 +828,61 @@ export class LiFiSkill extends BaseSkill {
     }
     
     try {
-      // Chain ID mapping: BuildBear sandbox (31337) -> Arbitrum mainnet (42161)
-      // LI.FI API doesn't recognize private sandbox ID, need to map to corresponding mainnet ID
-      const mappedFromChainId = Number(fromChainId) === 31337 ? 42161 : Number(fromChainId)
-      const mappedToChainId = Number(toChainId) === 31337 ? 42161 : Number(toChainId)
+      // Chain ID mapping for LI.FI API compatibility
+      // LI.FI API only supports specific chain IDs, so we need to map unsupported IDs
+      const mappedFromChainId = this.mapChainIdForLiFi(Number(fromChainId))
+      const mappedToChainId = this.mapChainIdForLiFi(Number(toChainId))
       
       console.log('Chain ID mapping:', {
         originalFromChainId: fromChainId,
         mappedFromChainId,
         originalToChainId: toChainId,
         mappedToChainId,
-        note: 'BuildBear sandbox (31337) mapped to Arbitrum mainnet (42161) for LI.FI API compatibility'
+        note: 'Unsupported chain IDs are mapped to LI.FI compatible IDs'
+      })
+      
+      // Token address mapping for LI.FI API compatibility
+      // When chain IDs are mapped, token addresses may also need to be mapped
+      let mappedFromTokenAddress = finalFromTokenAddress
+      let mappedToTokenAddress = finalToTokenAddress
+      
+      // Check if token addresses need mapping
+      if (TOKEN_ADDRESS_MAPPING[finalFromTokenAddress.toLowerCase()]) {
+        mappedFromTokenAddress = TOKEN_ADDRESS_MAPPING[finalFromTokenAddress.toLowerCase()] as Address
+        console.log(`🔗 Token address mapping (from): ${finalFromTokenAddress} -> ${mappedFromTokenAddress}`)
+      }
+      
+      if (TOKEN_ADDRESS_MAPPING[finalToTokenAddress.toLowerCase()]) {
+        mappedToTokenAddress = TOKEN_ADDRESS_MAPPING[finalToTokenAddress.toLowerCase()] as Address
+        console.log(`🔗 Token address mapping (to): ${finalToTokenAddress} -> ${mappedToTokenAddress}`)
+      }
+      
+      // Also check if we should use mainnet token addresses based on mapped chain IDs
+      if (MAINNET_TOKEN_ADDRESSES[mappedFromChainId as keyof typeof MAINNET_TOKEN_ADDRESSES]?.USDC &&
+          finalFromTokenAddress.toLowerCase().includes('usdc')) {
+        // If it's a USDC-like token on a testnet, use mainnet USDC address
+        const mainnetUsdc = MAINNET_TOKEN_ADDRESSES[mappedFromChainId as keyof typeof MAINNET_TOKEN_ADDRESSES]?.USDC
+        if (mainnetUsdc) {
+          mappedFromTokenAddress = mainnetUsdc
+          console.log(`🔗 Using mainnet USDC address for chain ${mappedFromChainId}: ${mappedFromTokenAddress}`)
+        }
+      }
+      
+      if (MAINNET_TOKEN_ADDRESSES[mappedToChainId as keyof typeof MAINNET_TOKEN_ADDRESSES]?.USDC &&
+          finalToTokenAddress.toLowerCase().includes('usdc')) {
+        // If it's a USDC-like token on a testnet, use mainnet USDC address
+        const mainnetUsdc = MAINNET_TOKEN_ADDRESSES[mappedToChainId as keyof typeof MAINNET_TOKEN_ADDRESSES]?.USDC
+        if (mainnetUsdc) {
+          mappedToTokenAddress = mainnetUsdc
+          console.log(`🔗 Using mainnet USDC address for chain ${mappedToChainId}: ${mappedToTokenAddress}`)
+        }
+      }
+      
+      console.log('Final token addresses for LI.FI API:', {
+        originalFromToken: finalFromTokenAddress,
+        mappedFromToken: mappedFromTokenAddress,
+        originalToToken: finalToTokenAddress,
+        mappedToToken: mappedToTokenAddress,
       })
       
       // Convert amount to BigIntish format (integer string of token smallest unit)
@@ -635,55 +931,57 @@ export class LiFiSkill extends BaseSkill {
         fromAmountBigIntish = String(amount)
       }
       
-      // Use real LI.FI SDK to get quote (using mapped chain IDs)
+      // Use real LI.FI SDK to get quote (using mapped chain IDs and token addresses)
+      // Note: getQuote API uses different parameter names than getRoutes
       const request = {
-        fromChainId: mappedFromChainId,
-        toChainId: mappedToChainId,
-        fromTokenAddress: finalFromTokenAddress,
-        toTokenAddress: finalToTokenAddress,
-        fromAmount: fromAmountBigIntish,
+        fromChain: mappedFromChainId,
+        fromToken: mappedFromTokenAddress,
         fromAddress: fromAddress as Address,
+        toChain: mappedToChainId,
+        toToken: mappedToTokenAddress,
+        fromAmount: fromAmountBigIntish,
         toAddress: toAddress as Address,
-        options: {
-          slippage: slippage / 100, // Convert to decimal
-          order: 'RECOMMENDED' as const,
-        },
+        slippage: slippage / 100, // Convert to decimal
+        order: 'RECOMMENDED' as const,
+        allowTransactionRequest: true, // 确保获取交易数据
+        integrator: 'Nomad-Arc',
       }
       
-      console.log('LI.FI request parameters (mapped):', JSON.stringify(request, null, 2))
-      console.log('Request URL:', `${this.lifiConfig.baseUrl}/advanced/routes`)
+      console.log('LI.FI quote request parameters (mapped):', this.safeStringify(request, 2))
+      console.log('Request URL:', `${this.lifiConfig.baseUrl}/quote`)
       
-      const routes = await getRoutes(request)
+      const quoteResponse = await this.getQuoteWithProxy(request)
       
-      if (!routes.routes || routes.routes.length === 0) {
-        throw new Error('No routes found for the given parameters')
+      if (!quoteResponse) {
+        throw new Error('No quote received from LI.FI API')
       }
       
-      const route = routes.routes[0]
+      // The quote API returns a single quote object, not an array of routes
+      const quoteData = quoteResponse
       
-      // Convert LI.FI SDK's Route to our LiFiQuote format
+      // Convert LI.FI SDK's Quote to our LiFiQuote format
       const quote: LiFiQuote = {
-        id: route.id || `quote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        fromChainId: route.fromChainId,
-        toChainId: route.toChainId,
+        id: quoteData.id || `quote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        fromChainId: quoteData.fromChain,
+        toChainId: quoteData.toChain,
         fromToken: {
-          address: route.fromToken.address as Address,
-          symbol: route.fromToken.symbol,
-          name: route.fromToken.name,
-          decimals: route.fromToken.decimals,
+          address: (quoteData.fromToken?.address || '0x0000000000000000000000000000000000000000') as Address,
+          symbol: quoteData.fromToken?.symbol || 'ETH',
+          name: quoteData.fromToken?.name || 'Ethereum',
+          decimals: quoteData.fromToken?.decimals || 18,
         },
         toToken: {
-          address: route.toToken.address as Address,
-          symbol: route.toToken.symbol,
-          name: route.toToken.name,
-          decimals: route.toToken.decimals,
+          address: (quoteData.toToken?.address || '0x0000000000000000000000000000000000000000') as Address,
+          symbol: quoteData.toToken?.symbol || 'ETH',
+          name: quoteData.toToken?.name || 'Ethereum',
+          decimals: quoteData.toToken?.decimals || 18,
         },
-        fromAmount: route.fromAmount,
-        toAmount: route.toAmount,
-        toAmountMin: route.toAmountMin || route.toAmount,
+        fromAmount: quoteData.fromAmount,
+        toAmount: quoteData.toAmount,
+        toAmountMin: quoteData.toAmountMin || quoteData.toAmount,
         
-        // Fee information - adjust based on actual Route type
-        gasCosts: (route as any).gasCosts?.map((cost: any) => ({
+        // Fee information
+        gasCosts: quoteData.gasCosts?.map((cost: any) => ({
           type: cost.type || 'GAS',
           amount: cost.amount || '0',
           token: {
@@ -694,22 +992,22 @@ export class LiFiSkill extends BaseSkill {
         })),
         
         // Path information
-        bridges: route.steps
-          .filter((step: any) => step.type === 'cross' || step.type === 'lifi')
-          .map((step: any) => step.tool),
-        steps: route.steps.map((step: any) => ({
+        bridges: quoteData.steps
+          ?.filter((step: any) => step.type === 'cross' || step.type === 'lifi')
+          .map((step: any) => step.tool) || [],
+        steps: quoteData.steps?.map((step: any) => ({
           type: step.type,
           tool: step.tool,
           action: step.action,
-        })),
+        })) || [],
         
-        // Time information - use actual property or default value
-        estimatedTime: (route as any).estimatedDuration || 120,
+        // Time information
+        estimatedTime: quoteData.estimatedDuration || 120,
         
-        // Transaction request data
-        transactionRequest: {
-          route,
-          note: 'Real LI.FI SDK quote',
+        // Transaction request data - quote API should return transactionRequest directly
+        transactionRequest: quoteData.transactionRequest || {
+          route: quoteData,
+          note: 'Real LI.FI SDK quote from /v1/quote endpoint',
           implementationRequired: false,
         },
       }
@@ -740,7 +1038,8 @@ export class LiFiSkill extends BaseSkill {
   }
   
   /**
-   * Execute cross-chain transfer
+   * Execute cross-chain transfer - 彻底重写版本
+   * 跳过 SDK 的 executeRoute，直接手动发送交易，彻底解决 DataCloneError
    */
   private async executeTransfer(params: Record<string, any>, context: AgentContext): Promise<LiFiExecutionResult> {
     const {
@@ -749,7 +1048,7 @@ export class LiFiSkill extends BaseSkill {
       amount,
       fromChainId,
       toChainId,
-      route // New: LI.FI SDK Route object
+      route // LI.FI SDK Route object from quote
     } = params
     
     // Generate execution ID
@@ -768,7 +1067,7 @@ export class LiFiSkill extends BaseSkill {
     // Save status
     this.executions.set(executionId, execution)
     
-    console.log('Executing LI.FI transfer:', {
+    console.log('🚀 执行 LI.FI 跨链转账（手动模式）:', {
       executionId,
       quoteId,
       fromAddress,
@@ -778,291 +1077,285 @@ export class LiFiSkill extends BaseSkill {
       hasRoute: !!route,
     })
 
+    // Show chain ID mapping information
+    const mappedFromChainId = this.mapChainIdForLiFi(fromChainId)
+    const mappedToChainId = this.mapChainIdForLiFi(toChainId)
+    console.log('🔗 链 ID 映射信息:', {
+      原始链ID: { 源链: fromChainId, 目标链: toChainId },
+      LI_FI映射后: { 源链: mappedFromChainId, 目标链: mappedToChainId },
+      沙盒映射: { 源链: this.mapChainIdForSandbox(mappedFromChainId), 目标链: this.mapChainIdForSandbox(mappedToChainId) }
+    })
+
     // If it's Arbitrum sandbox, print BuildBear Explorer URL template
-    if (fromChainId === 42161 || fromChainId === 31337) {
-      console.log('📡 BuildBear Arbitrum Sandbox Explorer: https://explorer.buildbear.io/delicate-cannonball-45d06d30')
-      console.log('  Transaction hash URL template: https://explorer.buildbear.io/delicate-cannonball-45d06d30/tx/{txHash}')
+    if (fromChainId === 42161 || fromChainId === 31337 || mappedFromChainId === 42161 || mappedFromChainId === 31337) {
+      console.log('📡 BuildBear Arbitrum 沙盒浏览器: https://explorer.buildbear.io/compatible-ironman-b68d3c41')
+      console.log('  交易哈希 URL 模板: https://explorer.buildbear.io/compatible-ironman-b68d3c41/tx/{txHash}')
     }
     
     try {
-      // Check if wallet client exists
+      // 1. 检查钱包客户端是否存在
       if (!this.lifiConfig.walletClient) {
-        throw new Error('Wallet client not configured. Please provide a wallet client in LiFiSkillConfig.')
+        throw new Error('钱包客户端未配置。请在 LiFiSkillConfig 中提供钱包客户端。')
       }
       
-      // Check if route exists
+      // 2. 检查路由是否存在
       if (!route) {
-        throw new Error('Route not provided. Please provide the LI.FI route from the quote.')
+        throw new Error('路由未提供。请提供来自报价的 LI.FI 路由。')
       }
       
-      console.log('🚀 Executing LI.FI cross-chain transfer using lightweight strategy')
-      console.log('📋 Route details:', {
-        fromChainId: route.fromChainId,
-        toChainId: route.toChainId,
-        fromAmount: route.fromAmount,
-        toAmount: route.toAmount,
-        steps: route.steps?.length || 0,
-        bridges: route.steps?.map((step: any) => step.tool).filter(Boolean) || [],
+      console.log('📋 路由详情:', {
+        源链ID: route.fromChainId,
+        目标链ID: route.toChainId,
+        源金额: route.fromAmount,
+        目标金额: route.toAmount,
+        步骤数: route.steps?.length || 0,
+        桥接器: route.steps?.map((step: any) => step.tool).filter(Boolean) || [],
       })
       
-      // Check approval status
-      console.log('Checking token approval status...')
+      // 3. 获取钱包客户端
+      const walletClient = this.lifiConfig.walletClient
       
-      // For USDC token, ensure it's approved to LI.FI executor
-      // LI.FI SDK usually handles approval, but check for safety
-      const usdcAddress = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
-      const lifiExecutor = this.lifiConfig.executorAddress
-      
-      if (route.fromToken.address.toLowerCase() === usdcAddress.toLowerCase()) {
-        console.log('USDC token detected, ensuring approval...')
-        // In actual implementation, should check and execute approval here
-        // But LI.FI SDK's transactionRequest might already include approval logic
+      if (!walletClient) {
+        throw new Error('钱包客户端未配置，无法执行交易')
       }
       
-      // Use LI.FI SDK's executeRoute to execute cross-chain transfer
-      console.log('⏳ Using LI.FI SDK executeRoute to execute cross-chain transfer...')
+      // 4. 序列化路由对象，避免任何不可序列化的内容
+      console.log('🔄 序列化路由对象...')
+      const serializedRoute = JSON.parse(this.safeStringify(route))
       
+      // 5. 提取交易数据 - 根据用户要求简化逻辑
+      console.log('🔍 开始提取交易数据（简化逻辑）...')
+      
+      // 定义简化的交易数据提取函数
+      const extractTransactionData = (route: any, originalFromChainId: number): { txRequest: any; sourceChainId: number } => {
+        console.log('🔍 简化提取交易数据...')
+        
+        // 用户要求：直接从返回的对象中提取
+        // const txRequest = route.transactionRequest || route.steps?.[0]?.transactionRequest;
+        const txRequest = route.transactionRequest || (route.steps && route.steps[0] && route.steps[0].transactionRequest)
+        
+        console.log('📋 提取结果:', {
+          hasRouteTransactionRequest: !!route.transactionRequest,
+          hasRouteSteps: !!route.steps,
+          hasRouteSteps0: !!(route.steps && route.steps[0]),
+          hasRouteSteps0TransactionRequest: !!(route.steps && route.steps[0] && route.steps[0].transactionRequest),
+          finalTxRequest: !!txRequest,
+          targetAddress: txRequest?.to || 'not found',
+          routeFromChainId: route.fromChainId,
+          originalFromChainId: originalFromChainId
+        })
+        
+        if (txRequest) {
+          console.log('✅ 成功提取交易数据')
+          console.log('📋 目标地址:', txRequest.to)
+          // 使用原始链 ID，而不是路由中的链 ID（路由中的可能是映射后的）
+          return {
+            txRequest,
+            sourceChainId: originalFromChainId
+          }
+        }
+        
+        console.error('❌ 无法从任何位置提取交易数据')
+        return { txRequest: null, sourceChainId: originalFromChainId }
+      }
+      
+      const { txRequest, sourceChainId } = extractTransactionData(serializedRoute, Number(fromChainId))
+      
+      // 6. 用户要求：必须校验 to 地址是否存在
+      if (!txRequest) {
+        throw new Error('无法从 LI.FI 步骤中获取交易请求数据')
+      }
+      
+      if (!txRequest?.to) {
+        throw new Error('无法从 LI.FI 步骤中获取目标合约地址(to)')
+      }
+      
+      // 验证交易请求字段
+      console.log('🔍 验证交易请求字段...')
+      console.log('📋 交易请求对象:', {
+        to: txRequest.to,
+        data: txRequest.data ? `${txRequest.data.substring(0, 100)}...` : '无',
+        value: txRequest.value,
+        gasPrice: txRequest.gasPrice,
+        gasLimit: txRequest.gasLimit,
+        chainId: txRequest.chainId,
+      })
+      
+      // 关键修复：确保 to 地址存在且格式正确
+      if (!txRequest.to || !/^0x[a-fA-F0-9]{40}$/.test(txRequest.to)) {
+        throw new Error('无法从 LI.FI 步骤中获取有效的目标合约地址(to)')
+      }
+      
+      // 用户要求：确保 to 字段被正确赋值为 txRequest.to as 0x${string}
+      const toAddress = txRequest.to as `0x${string}`
+      console.log('✅ 目标地址已验证:', toAddress)
+      
+      // 处理 value 为 BigInt
+      const value = txRequest.value ? BigInt(txRequest.value) : 0n
+      
+      console.log('🔗 链 ID 验证:', {
+        路由源链ID: serializedRoute.fromChainId,
+        参数源链ID: fromChainId,
+        实际源链ID: sourceChainId,
+        说明: '交易必须在源链上发送'
+      })
+      
+      // 7. 用户要求：强制链切换 - 在 sendTransaction 之前切换链
+      console.log('🔄 检查并切换钱包到源链...')
       try {
-        // Get wallet client
-        const walletClient = this.lifiConfig.walletClient
+        const currentChainId = await walletClient.getChainId()
+        console.log('🔗 钱包当前链 ID:', currentChainId, '期望链 ID:', sourceChainId)
         
-        if (!walletClient) {
-          throw new Error('Wallet client not configured, cannot execute transaction')
-        }
-        
-        // Manually create LI.FI SDK compatible Signer to avoid DataCloneError from automatic cloning
-        const lifiSigner = this.createLiFiSigner(walletClient)
-        
-        // SDK logical ID trick: ensure route object uses logical ID 42161 instead of physical ID 31337
-        // LI.FI SDK needs to see 42161 (Arbitrum mainnet) to process route correctly
-        const processedRoute = { ...route }
-        if (processedRoute.fromChainId === 31337) {
-          console.log('🔄 Performing SDK logical ID trick: mapping fromChainId from 31337 to 42161')
-          processedRoute.fromChainId = 42161
-          
-          // Also update chain IDs in route steps
-          if (processedRoute.steps && Array.isArray(processedRoute.steps)) {
-            processedRoute.steps = processedRoute.steps.map((step: any) => {
-              if (step.action.fromChainId === 31337) {
-                return {
-                  ...step,
-                  action: {
-                    ...step.action,
-                    fromChainId: 42161
-                  }
-                }
-              }
-              return step
-            })
+        if (currentChainId !== sourceChainId) {
+          console.log(`🔄 钱包链不匹配，正在切换到源链 ${sourceChainId}...`)
+          try {
+            // 用户要求：必须调用 walletClient.switchChain({ id: Number(route.fromChainId) })
+            await walletClient.switchChain({ id: sourceChainId })
+            console.log(`✅ 已切换到链 ${sourceChainId}`)
+            // 等待一小段时间让链切换生效
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } catch (switchError) {
+            console.warn(`⚠️ 链切换失败: ${switchError instanceof Error ? switchError.message : String(switchError)}`)
+            // 继续尝试发送交易，可能会失败，但至少我们尝试过
           }
+        } else {
+          console.log('✅ 钱包已在正确的源链上')
         }
-        
-        // Try to execute route using LI.FI SDK's executeRoute function
-        console.log('🚀 Attempting to call executeRoute for cross-chain transaction (using manual Signer)...')
-        console.log('📋 Route details:', {
-          originalFromChainId: route.fromChainId,
-          processedFromChainId: processedRoute.fromChainId,
-          toChainId: processedRoute.toChainId,
-          fromAmount: processedRoute.fromAmount,
-          toAmount: processedRoute.toAmount,
-          steps: processedRoute.steps?.length || 0,
-        })
-        
-        let executeResult: any
-        let transactionHash: `0x${string}` | undefined
-        
-        try {
-          // Execute route - executeRoute handles all steps including approval and cross-chain transaction
-          console.log('⏳ Executing cross-chain route...')
-          executeResult = await executeRoute(lifiSigner, processedRoute)
-          
-          console.log('✅ LI.FI SDK executeRoute call successful')
-          
-          // According to LI.FI SDK documentation, executeRoute returns updated route
-          // Transaction hash might be in route's steps
-          const steps = executeResult.steps || []
-          for (const step of steps) {
-            if ((step as any).transactionHash) {
-              transactionHash = (step as any).transactionHash as `0x${string}`
-              console.log(`🔍 Found transaction hash in step "${step.type}": ${transactionHash}`)
-              break
-            } else if ((step as any).transactionId) {
-              transactionHash = (step as any).transactionId as `0x${string}`
-              console.log(`🔍 Found transaction ID in step "${step.type}": ${transactionHash}`)
-              break
-            }
-          }
-          
-          // If not found in steps, try to find in other parts of route
-          if (!transactionHash && (executeResult as any).transactionHash) {
-            transactionHash = (executeResult as any).transactionHash as `0x${string}`
-          } else if (!transactionHash && (executeResult as any).transactionId) {
-            transactionHash = (executeResult as any).transactionId as `0x${string}`
-          }
-          
-          if (!transactionHash) {
-            console.warn('⚠️  executeRoute did not return transaction hash, checking route steps:')
-            console.log(JSON.stringify(executeResult, null, 2))
-            throw new Error('executeRoute did not return transaction hash, please check route execution status')
-          }
-          
-        } catch (executeError) {
-          console.warn('⚠️  LI.FI SDK executeRoute execution failed (possibly DataCloneError):',
-            executeError instanceof Error ? executeError.message : String(executeError))
-          
-          // Alternative: manually extract transactionRequest and send transaction
-          console.log('🔄 Attempting manual transaction sending as alternative...')
-          
-          // Check if route contains transactionRequest
-          if (processedRoute.transactionRequest) {
-            console.log('📋 Route contains transactionRequest, attempting manual send...')
-            const txRequest = processedRoute.transactionRequest
-            
-            // Manually send transaction
-            console.log('📤 Manually sending transaction...')
-            transactionHash = await walletClient.sendTransaction({
-              account: walletClient.account,
-              to: txRequest.to,
-              data: txRequest.data,
-              value: txRequest.value ? BigInt(txRequest.value) : 0n,
-              chain: walletClient.chain,
-            })
-            
-            console.log(`✅ Manual transaction sent successfully, hash: ${transactionHash}`)
-            executeResult = { transactionHash, steps: [] }
-            
-          } else if (processedRoute.steps && processedRoute.steps.length > 0) {
-            // Try to extract transaction data from first step
-            console.log('📋 Extracting transaction data from route steps...')
-            const firstStep = processedRoute.steps[0]
-            if (firstStep.transactionRequest) {
-              const txRequest = firstStep.transactionRequest
-              console.log('📤 Manually sending transaction from first step...')
-              transactionHash = await walletClient.sendTransaction({
-                account: walletClient.account,
-                to: txRequest.to,
-                data: txRequest.data,
-                value: txRequest.value ? BigInt(txRequest.value) : 0n,
-                chain: walletClient.chain,
-              })
-              
-              console.log(`✅ Manual transaction sent successfully, hash: ${transactionHash}`)
-              executeResult = { transactionHash, steps: [firstStep] }
-            } else {
-              throw new Error('Route does not contain executable transaction request, cannot send manually')
-            }
-          } else {
-            // Re-throw original error
-            throw executeError
-          }
-        }
-        
-        if (!transactionHash) {
-          throw new Error('Unable to obtain transaction hash, execution failed')
-        }
-        
-        console.log('📊 Execution result:', {
-          transactionHash,
-          fromAmount: executeResult?.fromAmount || processedRoute.fromAmount,
-          toAmount: executeResult?.toAmount || processedRoute.toAmount,
-          steps: executeResult?.steps?.length || 0,
-        })
-        
-        const explorerUrl = `https://explorer.buildbear.io/delicate-cannonball-45d06d30/tx/${transactionHash}`
-        
-        console.log(`✅ Transaction sent, waiting for confirmation...`)
-        console.log(`   Transaction hash: ${transactionHash}`)
-        console.log(`   Explorer URL: ${explorerUrl}`)
-        
-        // Wait for transaction confirmation and get receipt
-        console.log('⏳ Waiting for transaction confirmation...')
-        const receipt = await waitForTransactionReceipt(walletClient, {
-          hash: transactionHash,
-          timeout: 120_000, // 2-minute timeout
-        })
-        
-        // Print transaction receipt details
-        console.log('✅ Transaction confirmed successfully!')
-        console.log(`   Block number: ${receipt.blockNumber}`)
-        console.log(`   Block hash: ${receipt.blockHash}`)
-        console.log(`   Transaction index: ${receipt.transactionIndex}`)
-        console.log(`   Gas used: ${receipt.gasUsed}`)
-        console.log(`   Status: ${receipt.status === 'success' ? 'Success' : 'Failure'}`)
-        
-        if (receipt.status !== 'success') {
-          throw new Error(`Transaction execution failed, status: ${receipt.status}`)
-        }
-        
-        const result: LiFiExecutionResult = {
-          ...execution,
-          status: LiFiExecutionStatus.COMPLETED,
-          transactionHash,
-          toAmount: route.toAmount,
-          bridgeName: route.steps?.[0]?.tool || 'LI.FI',
-          completedAt: Date.now(),
-          note: `Transaction confirmed successfully! Block number: ${receipt.blockNumber}, Gas used: ${receipt.gasUsed}`,
-          implementationRequired: false, // Mark as implemented
-          retryCount: 0,
-        }
-        
-        // Update status
-        this.executions.set(executionId, result)
-        
-        // Log execution
-        this.logExecution('lifi_execute', params, context, result)
-        
-        return result
-        
       } catch (error) {
-        console.error('❌ LI.FI cross-chain transfer execution failed:', error)
-        
-        // Record detailed error information
-        if (error instanceof Error) {
-          console.error('Error details:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-          })
-        }
-        
-        // Check if it's a configuration issue
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        
-        if (errorMessage.includes('insufficient funds')) {
-          console.log('⚠️  Insufficient balance, ensure account has enough ETH for gas fees')
-        }
-        
-        if (errorMessage.includes('user rejected')) {
-          console.log('⚠️  User rejected the transaction')
-        }
-        
-        if (errorMessage.includes('allowance')) {
-          console.log('⚠️  Insufficient allowance, please execute approval transaction first')
-        }
-        
-        // Throw error for outer layer to handle
-        throw new Error(`LI.FI SDK executeRoute execution failed: ${errorMessage}`)
+        console.warn('⚠️ 无法获取钱包当前链 ID，继续发送交易:', error instanceof Error ? error.message : String(error))
       }
+      
+      // 8. 发送交易
+      console.log('🚀 准备发送手动交易:', {
+        目标地址: toAddress,
+        数据长度: txRequest.data?.length || 0,
+        金额: value.toString(),
+        源链ID: sourceChainId,
+        说明: '使用手动模式发送交易，跳过 SDK 的 executeRoute'
+      })
+      
+      // 关键修复：确保使用正确的链 ID，并添加详细日志
+      console.log('🔗 最终发送请求的 ChainID:', sourceChainId)
+      console.log('🔗 验证 ChainID 类型:', typeof sourceChainId)
+      console.log('🔗 原始参数 fromChainId:', fromChainId)
+      
+      // 构建交易参数，确保只使用 chainId，不传入 chain 对象
+      const transactionParams: any = {
+        account: walletClient.account,
+        to: toAddress,
+        data: txRequest.data,
+        value,
+        chainId: sourceChainId, // 显式指定源链 ID
+      }
+      
+      // 可选：gasPrice 和 gasLimit
+      if (txRequest.gasPrice) {
+        transactionParams.gasPrice = BigInt(txRequest.gasPrice)
+      }
+      if (txRequest.gasLimit) {
+        transactionParams.gas = BigInt(txRequest.gasLimit)
+      }
+      
+      console.log('📤 发送交易参数:', this.safeStringify({
+        ...transactionParams,
+        data: transactionParams.data ? `${transactionParams.data.substring(0, 50)}...` : '无',
+        value: transactionParams.value.toString(),
+        account: transactionParams.account?.address || '无'
+      }, 2))
+      
+      console.log('📤 发送交易...')
+      const transactionHash = await walletClient.sendTransaction(transactionParams)
+      
+      console.log(`✅ 交易发送成功，哈希: ${transactionHash}`)
+      
+      const explorerUrl = `https://explorer.buildbear.io/compatible-ironman-b68d3c41/tx/${transactionHash}`
+      console.log(`  交易哈希: ${transactionHash}`)
+      console.log(`  浏览器 URL: ${explorerUrl}`)
+      
+      // 9. 等待交易确认
+      console.log('⏳ 等待交易确认...')
+      const receipt = await waitForTransactionReceipt(walletClient, {
+        hash: transactionHash,
+        timeout: 120_000, // 2分钟超时
+      })
+      
+      // 打印交易收据详情
+      console.log('✅ 交易确认成功!')
+      console.log(`   区块号: ${receipt.blockNumber}`)
+      console.log(`   区块哈希: ${receipt.blockHash}`)
+      console.log(`   交易索引: ${receipt.transactionIndex}`)
+      console.log(`   Gas 使用量: ${receipt.gasUsed}`)
+      console.log(`   状态: ${receipt.status === 'success' ? '成功' : '失败'}`)
+      
+      if (receipt.status !== 'success') {
+        throw new Error(`交易执行失败，状态: ${receipt.status}`)
+      }
+      
+      // 10. 更新执行状态
+      const result: LiFiExecutionResult = {
+        ...execution,
+        status: LiFiExecutionStatus.COMPLETED,
+        transactionHash,
+        toAmount: route.toAmount,
+        bridgeName: route.steps?.[0]?.tool || 'LI.FI',
+        completedAt: Date.now(),
+        note: `交易确认成功! 区块号: ${receipt.blockNumber}, Gas 使用量: ${receipt.gasUsed}`,
+        implementationRequired: false, // 标记为已实现
+        retryCount: 0,
+      }
+      
+      // 更新状态
+      this.executions.set(executionId, result)
+      
+      // 记录执行日志
+      this.logExecution('lifi_execute', params, context, result)
+      
+      return result
       
     } catch (error) {
-      console.error('LI.FI transfer execution failed:', error)
+      console.error('❌ LI.FI 跨链转账执行失败:', error)
       
+      // 记录详细错误信息
+      if (error instanceof Error) {
+        console.error('错误详情:', {
+          消息: error.message,
+          堆栈: error.stack,
+          名称: error.name,
+        })
+      }
+      
+      // 检查是否是配置问题
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes('insufficient funds')) {
+        console.log('⚠️  余额不足，请确保账户有足够的 ETH 支付 gas 费用')
+      }
+      
+      if (errorMessage.includes('user rejected')) {
+        console.log('⚠️  用户拒绝了交易')
+      }
+      
+      if (errorMessage.includes('allowance')) {
+        console.log('⚠️  授权不足，请先执行授权交易')
+      }
+      
+      // 创建错误结果
       const errorResult: LiFiExecutionResult = {
         ...execution,
         status: LiFiExecutionStatus.FAILED,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        note: 'Execution failed, please check configuration and network connection',
+        error: errorMessage,
+        note: '执行失败，请检查配置和网络连接',
         implementationRequired: true,
         retryCount: 0,
       }
       
-      // Update status
+      // 更新状态
       this.executions.set(executionId, errorResult)
       
-      // Log error
+      // 记录错误日志
       this.logExecution('lifi_execute_error', params, context, {
         error: String(error),
-        // Environment variable check
+        // 环境变量检查
         hasEnvRpc: !!process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC,
       })
       

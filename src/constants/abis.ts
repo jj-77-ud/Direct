@@ -1,6 +1,8 @@
+'use client';
+
 /**
  * Smart Contract ABI Definitions
- * 
+ *
  * This file contains all smart contract ABIs required by the project.
  * Note: Uniswap v4 ABIs are imported from @uniswap/v4-sdk to avoid duplicate definitions.
  */

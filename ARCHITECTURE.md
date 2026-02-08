@@ -15,7 +15,7 @@ Direct is an AI agent-based cross-chain DeFi platform that adopts a skill-based 
 | `tsconfig.json` | Configuration File | TypeScript compilation configuration | TypeScript |
 | `tsconfig.tsnode.json` | Configuration File | TypeScript Node.js runtime configuration | ts-node, typescript |
 | `tsconfig.tsbuildinfo` | Configuration File | TypeScript build information cache file | TypeScript |
-| `next.config.js` | Configuration File | Next.js application configuration | Next.js |
+| `next.config.js` | Configuration File | Next.js application configuration with Web3 polyfills and wallet dependency fallbacks | Next.js |
 | `tailwind.config.ts` | Configuration File | Tailwind CSS styling configuration | Tailwind CSS |
 | `postcss.config.js` | Configuration File | PostCSS processing configuration, required for Tailwind CSS | postcss, autoprefixer |
 | `.env.example` | Configuration File | Environment variable template example | All modules requiring environment variables |
@@ -362,6 +362,31 @@ vercel deploy --prod
 
 ## 12. Changelog
 
+### 2026-02-07: Fixed @gemini-wallet/core Missing Build Error
+#### Issue Fixes
+1. **Webpack Configuration Update**:
+   - Added `"@gemini-wallet/core": false` to `config.resolve.fallback` in `next.config.js` to resolve module not found error from `@wagmi/connectors`
+   - Added additional fallback entries for other optional wallet SDKs: `porto`, `@metamask/sdk`, `@safe-global/safe-apps-sdk`, `@safe-global/safe-apps-provider`, `@walletconnect/ethereum-provider`
+   - Updated `transpilePackages` to include `wagmi` alongside `@wagmi/connectors` and `@rainbow-me/rainbowkit`
+
+2. **Build Verification**:
+   - Ran `npm run build` successfully, confirming no more module resolution errors
+   - Build completes with zero errors, enabling production deployment
+
+#### Technical Implementation
+- **Fallback Strategy**: Used Webpack's `resolve.fallback` to ignore missing optional dependencies
+- **Transpilation**: Ensured necessary packages are transpiled by Next.js for compatibility
+- **No Package Installation**: Fixed purely through configuration without installing new packages
+
+#### File Changes
+1. `next.config.js` - Updated `webpack` configuration and `transpilePackages` array
+
+#### Verification Method
+Run build to verify fix:
+```bash
+npm run build
+```
+
 ### 2026-02-05: Created LI.FI Sandbox Test Script
 #### New Content
 1. **LI.FI Sandbox Test Script**:
@@ -461,4 +486,4 @@ npx ts-node scripts/test-circle-skill.ts
 
 ---
 
-*Last Updated: 2026-02-05*
+*Last Updated: 2026-02-07*

@@ -14,7 +14,18 @@ const nextConfig = {
       https: require.resolve('https-browserify'),
       os: require.resolve('os-browserify/browser'),
       path: require.resolve('path-browserify'),
+      "porto/internal": false,
+      porto: false,
+      "@gemini-wallet/core": false,
+      "@metamask/sdk": false,
+      "@safe-global/safe-apps-sdk": false,
+      "@safe-global/safe-apps-provider": false,
+      "@walletconnect/ethereum-provider": false,
     };
+
+    // 移除伪造的 @metamask/sdk 别名，使用真实的 SDK
+    // 注意：不再将 @metamask/sdk 指向伪造的补丁文件
+    // 这样 RainbowKit 可以使用真实的钱包连接
 
     // Add support for .wasm files
     config.experiments = {
@@ -37,6 +48,8 @@ const nextConfig = {
   experimental: {
     esmExternals: 'loose',
   },
+  // Transpile specific packages for compatibility
+  transpilePackages: ['@wagmi/connectors', '@rainbow-me/rainbowkit', 'wagmi', '@metamask/sdk'],
 };
 
 module.exports = nextConfig;

@@ -60,19 +60,74 @@ const INTENT_PARSING_SYSTEM_PROMPT = `You are a professional Web3 intent parser 
 ## Output Format Requirements
 You must return a valid JSON object containing the following fields:
 {
-  "intentType": "intent type enum value",
+  "intentType": "SWAP",  // or "BRIDGE", "RESOLVE_ENS", etc.
   "description": "user's original instruction",
-  "params": { ... }, // intent-specific parameters
-  "chainId": number, // target chain ID (e.g., 421614 for Arbitrum Sepolia)
-  "confidence": 0.0-1.0 // parsing confidence
+  "params": { ... },  // intent-specific parameters (see examples below)
+  "chainId": 421614,  // target chain ID
+  "confidence": 0.85  // parsing confidence 0.0-1.0
+}
+
+## Parameter Examples for Different Intent Types
+
+### SWAP Example:
+{
+  "intentType": "SWAP",
+  "description": "swap 1 ETH for USDC",
+  "params": {
+    "fromToken": "ETH",
+    "toToken": "USDC",
+    "amountIn": {
+      "raw": "1000000000000000000",
+      "formatted": "1.0"
+    },
+    "slippage": 0.5
+  },
+  "chainId": 421614,
+  "confidence": 0.9
+}
+
+### BRIDGE Example:
+{
+  "intentType": "BRIDGE",
+  "description": "bridge 100 USDC from Arbitrum to Base",
+  "params": {
+    "fromChainId": 421614,  // Arbitrum Sepolia
+    "toChainId": 84532,     // Base Sepolia
+    "token": "USDC",
+    "amount": {
+      "raw": "100000000",  // 100 USDC (6 decimals)
+      "formatted": "100.0"
+    }
+  },
+  "chainId": 421614,
+  "confidence": 0.85
+}
+
+### RESOLVE_ENS Example:
+{
+  "intentType": "RESOLVE_ENS",
+  "description": "resolve ens domain vitalik.eth",
+  "params": {
+    "domain": "vitalik.eth"
+  },
+  "chainId": 1,
+  "confidence": 0.95
 }
 
 ## Important Rules
 1. If user instruction is ambiguous or missing required information, return null and explain why
 2. Do not generate mock data, clearly mark if information is missing
-3. Amounts must include raw value and formatted value
+3. Amounts must include raw value (string) and formatted value (string)
 4. Addresses must validate format (0x prefix, 40 hex characters)
-5. Chain IDs must use standard network IDs
+5. Chain IDs must use standard network IDs:
+   - 1: Ethereum Mainnet
+   - 42161: Arbitrum One
+   - 421614: Arbitrum Sepolia
+   - 8453: Base Mainnet
+   - 84532: Base Sepolia
+   - 11155111: Sepolia
+6. For cross-chain operations (BRIDGE, CCTP_TRANSFER), you MUST extract both fromChainId and toChainId
+7. For token amounts, calculate raw value based on token decimals (ETH: 18, USDC: 6)
 
 Now start parsing user instruction:`
 

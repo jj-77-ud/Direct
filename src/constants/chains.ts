@@ -23,7 +23,7 @@ import { type BlockchainNetwork } from '@/types/blockchain'
 // ==================== Environment Variable Configuration ====================
 
 // BuildBear Arbitrum Sandbox Environment RPC
-const ARBITRUM_SANDBOX_RPC = process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC || 'https://rpc.buildbear.io/delicate-cannonball-45d06d30'
+const ARBITRUM_SANDBOX_RPC = process.env.NEXT_PUBLIC_ARBITRUM_SANDBOX_RPC || 'https://rpc.buildbear.io/compatible-ironman-b68d3c41'
 
 // ==================== Supported Chain Configurations ====================
 
@@ -89,7 +89,7 @@ export const SUPPORTED_CHAINS: Record<number, BlockchainNetwork> = {
     blockExplorers: {
       default: {
         name: 'BuildBear Explorer',
-        url: 'https://explorer.buildbear.io/delicate-cannonball-45d06d30',
+        url: 'https://explorer.buildbear.io/compatible-ironman-b68d3c41',
       },
     },
     testnet: false, // Keep false for compatibility with LI.FI SDK

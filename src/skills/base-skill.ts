@@ -323,6 +323,23 @@ export abstract class BaseSkill implements ISkill {
   }
   
   /**
+   * JSON.stringify replacer function to handle BigInt serialization
+   */
+  protected bigIntReplacer(key: string, value: any): any {
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
+    return value
+  }
+
+  /**
+   * Safe JSON.stringify that handles BigInt values
+   */
+  protected safeStringify(obj: any, indent?: number): string {
+    return JSON.stringify(obj, this.bigIntReplacer.bind(this), indent)
+  }
+
+  /**
    * Sanitize Result
    */
   private sanitizeResult(result: any): any {
@@ -331,7 +348,7 @@ export abstract class BaseSkill implements ISkill {
     }
     
     // Deep copy and sanitize
-    const sanitized = JSON.parse(JSON.stringify(result))
+    const sanitized = JSON.parse(this.safeStringify(result))
     
     // Can add more sanitization logic
     
